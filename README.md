@@ -33,12 +33,15 @@ Os dados ficam só no seu computador; nada é enviado para a internet.
 
 Tem prioridade sobre as colunas de escala da planilha de treinamentos. Aceita qualquer um destes formatos (pode misturar em abas diferentes):
 
-- **Por colaborador:** Matrícula, Escala, Início da Escala.
-- **Por grupo:** Grupo (ou Turma/Letra), Escala, Início da Escala. A planilha de treinamentos precisa da coluna Grupo.
-- **Calendário:** Matrícula (ou Grupo) nas linhas, uma coluna por data e **F** (ou Folga/DSR) nos dias de folga.
+- **Por colaborador:** Matrícula, Escala (ex.: 6x4) e **Início da Folga** (qualquer data que foi o 1º dia de folga). Se todos seguem a mesma escala, a coluna Escala pode ficar de fora: vale a **Escala padrão** da tela (6x4). No lugar do Início da Folga também vale o Início da Escala (1º dia de trabalho).
+- **Escala mensal** (recomendada quando não há turno fixo): uma aba por mês com o mês no nome (ex.: "Janeiro 2027") ou num título acima da tabela, Matrícula e/ou Nome nas linhas, dias 1 a 31 nas colunas e **F** (ou Folga/DSR) nos dias de folga. O programa usa exatamente os dias marcados.
+- **Calendário com datas:** igual ao mensal, mas com datas completas no cabeçalho.
+- **Por grupo:** Grupo (ou Turma/Letra), Escala, Início da Folga. A planilha de treinamentos precisa da coluna Grupo.
 - **Lista de folgas:** Matrícula e Data, uma linha por dia de folga.
 
-Quem não for encontrado na escala aparece num aviso e na aba "Sem turma". Matrículas com zeros à esquerda (0123 e 123) são consideradas iguais.
+Quem não for encontrado na escala aparece num aviso e na aba "Sem turma". Matrículas com zeros à esquerda (0123 e 123) são consideradas iguais. Se a escala não tiver matrícula, o colaborador é procurado pelo nome.
+
+Na escala 6x4 a folga tem 4 dias, então o treinamento só pode cair no 2º ou no 3º dia de folga (e precisa ser dia útil).
 Aba opcional **Feriados** (Data, Descrição) para feriados locais. Os feriados nacionais já são considerados.
 
 Sem vencimento, ele é calculado pela data do último treinamento + validade da NR, que pode ser editada na tela
