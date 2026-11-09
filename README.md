@@ -23,7 +23,7 @@ Os dados ficam só no seu computador; nada é enviado para a internet.
 | NR | sim | NR-10, NR 35, NR-33 |
 | Data Último Treinamento | se não tiver Vencimento | 15/01/2025 |
 | Vencimento | se não tiver a data do último | 15/01/2027 |
-| Grupo | não | A, B, C… (turma/letra da escala, se a planilha de escala for por grupo) |
+| Turma | sim, se a escala for por turma | A, B, C, D… (a turma da escala do colaborador) |
 | Escala | não* | 14x14, 7x7, 14x7 (dias trabalhados x dias de folga) |
 | Início da Escala | não* | data que foi o 1º dia de trabalho de um ciclo |
 
@@ -31,7 +31,23 @@ Os dados ficam só no seu computador; nada é enviado para a internet.
 
 ## Planilha de escala (separada, atualizada todo ano)
 
-Tem prioridade sobre as colunas de escala da planilha de treinamentos. Aceita qualquer um destes formatos (pode misturar em abas diferentes):
+Tem prioridade sobre as colunas de escala da planilha de treinamentos.
+
+### Folga por turma (o formato mais comum)
+
+Uma linha por dia, com a data e a turma (ou turmas) de folga:
+
+| Data | Turma de folga |
+|---|---|
+| 08/11/2026 | D |
+| 09/11/2026 | D e E |
+
+- Liste **todos** os dias de folga de cada turma (na 6x4, os 4 dias seguidos). Assim o programa sabe qual é o 1º e o último dia da folga.
+- Mais de uma turma no mesmo dia: separe com "e", vírgula ou barra. "Turma D" e "D" são entendidos como a mesma turma.
+- Também vale um calendário com uma coluna por turma (Data | A | B | C …) e **F** nos dias de folga.
+- Cada colaborador é ligado à turma dele pela coluna **Turma** da planilha de treinamentos, ou por uma aba **Matrícula + Turma** na planilha de escala.
+
+### Outros formatos aceitos
 
 - **Por colaborador:** Matrícula, Escala (ex.: 6x4) e **Início da Folga** (qualquer data que foi o 1º dia de folga). Se todos seguem a mesma escala, a coluna Escala pode ficar de fora: vale a **Escala padrão** da tela (6x4). No lugar do Início da Folga também vale o Início da Escala (1º dia de trabalho).
 - **Escala mensal** (recomendada quando não há turno fixo): uma aba por mês com o mês no nome (ex.: "Janeiro 2027") ou num título acima da tabela, Matrícula e/ou Nome nas linhas, dias 1 a 31 nas colunas e **F** (ou Folga/DSR) nos dias de folga. O programa usa exatamente os dias marcados.

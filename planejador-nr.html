@@ -218,13 +218,14 @@ details.cfg summary { cursor: pointer; font-weight: 600; }
         <li><b>Matrícula</b>, <b>Nome</b>, <b>Setor</b>, <b>Função</b></li>
         <li><b>NR</b>: ex. NR-10, NR 35, NR-33</li>
         <li><b>Data Último Treinamento</b> e/ou <b>Vencimento</b>. Sem vencimento, ele é calculado pela validade configurada acima.</li>
-        <li><b>Grupo</b> (opcional): turma/letra da escala, quando a planilha de escala é por grupo</li>
+        <li><b>Turma</b>: a turma da escala do colaborador (A, B, C, D…), quando a escala de folgas é por turma</li>
         <li><b>Escala</b> e <b>Início da Escala</b> (opcionais se você carregar a planilha de escala): ex. 14x14, 7x7, 14x7</li>
         <li><b>Início da Escala</b>: uma data que foi o 1º dia de trabalho de um ciclo</li>
       </ul>
       <h2>Planilha de escala (separada)</h2>
       <p>Como a escala muda todo ano, ela pode ficar num arquivo próprio: clique em <b>Carregar escala</b>. Ela tem prioridade sobre as colunas de escala da planilha de treinamentos. Formatos aceitos (veja <b>Modelo de escala</b>):</p>
       <ul>
+        <li><b>Folga por turma</b>: uma linha por dia com a <b>Data</b> e a <b>Turma de folga</b> (ex.: 08/11/2026 | D; mais de uma turma: "A e D"). Cada colaborador é ligado à sua turma pela coluna <b>Turma</b> da planilha de treinamentos, ou por uma aba Matrícula + Turma na planilha de escala. Também vale um calendário Data | A | B | C… com F nos dias de folga.</li>
         <li><b>Por colaborador</b>: Matrícula, Escala (ex.: 6x4) e <b>Início da Folga</b> (um 1º dia de folga). Se todos seguem a mesma escala, a coluna Escala pode ficar de fora: vale a <b>Escala padrão</b> da tela.</li>
         <li><b>Escala mensal</b> (para quem não tem turno fixo): uma aba por mês com o mês no nome (ex.: Janeiro 2027), Matrícula/Nome nas linhas, dias 1 a 31 nas colunas e <b>F</b> nos dias de folga. O programa lê exatamente os dias marcados.</li>
         <li><b>Calendário com datas</b>: igual ao mensal, mas com datas completas no cabeçalho</li>
@@ -313,7 +314,7 @@ const COLS = {
   ultimo: ["dataultimotreinamento", "ultimotreinamento", "datadoultimotreinamento", "datatreinamento", "realizadoem", "dataderealizacao", "datarealizacao", "realizacao", "conclusao", "dataconclusao"],
   vencimento: ["vencimento", "datavencimento", "datadevencimento", "validade", "venceem", "datavalidade", "proximovencimento"],
   escala: ["escala", "regime", "escaladetrabalho", "tipodeescala", "tipoescala"],
-  grupo: ["grupo", "grupoescala", "grupodeescala", "turma", "turmaescala", "turmadeescala", "letra", "letraturno", "letradoturno", "equipe", "turno"],
+  grupo: ["turmadefolga", "turmaemfolga", "turmafolga", "turmasdefolga", "turmasemfolga", "equipedefolga", "grupodefolga", "folga", "folgas", "grupo", "grupoescala", "grupodeescala", "turma", "turmaescala", "turmadeescala", "letra", "letraturno", "letradoturno", "equipe", "turno"],
   iniFolga: ["iniciodafolga", "iniciofolga", "primeirodiadefolga", "primeirodiadafolga", "primeirafolga", "proximafolga", "datadaproximafolga", "inicioproximafolga", "iniciodaproximafolga", "saidadefolga", "saidafolga"],
   base: ["inicioescala", "iniciodaescala", "database", "databaseescala", "iniciociclo", "iniciodociclo", "referenciaescala", "primeirodiadetrabalho", "inicio"],
   data: ["data", "dia", "datafolga", "dataferiado"],
@@ -326,7 +327,7 @@ function mapHeaders(headers) {
   }
   // segunda passada: nomes parecidos, só para o que não casou exatamente (o mais específico primeiro)
   const parecidos = Object.entries(COLS).filter(([f]) => !map[f] && f !== "data" && f !== "descricao")
-    .flatMap(([f, al]) => al.filter((a) => a.length >= 4).map((a) => [f, a])).sort((x, y) => y[1].length - x[1].length);
+    .flatMap(([f, al]) => al.filter((a) => a.length >= 4 && a !== "folga" && a !== "folgas").map((a) => [f, a])).sort((x, y) => y[1].length - x[1].length);
   for (const [field, a] of parecidos) {
     if (map[field]) continue;
     const hit = keys.find(([h, k]) => k.includes(a) && !Object.values(map).includes(h));
@@ -379,11 +380,12 @@ function parseWorkbook(wb) {
 
 // ---------- planilha de escala (separada, troca todo ano) ----------
 const keyMat = (v) => String(v ?? "").trim().replace(/\.0+$/, "").replace(/^0+(?=\d)/, "").toUpperCase();
-const keyGrupo = (v) => norm(v);
+const keyGrupo = (v) => norm(v).replace(/^(turma|grupo|equipe|letra|time|turno|escala)(de)?/, "") || norm(v);
+const separaGrupos = (v) => String(v ?? "").split(/\s*(?:[,;\/+&|]|\s+e\s+)\s*/).map((x) => x.trim()).filter(Boolean);
 const FOLGA = new Set(["f", "fo", "fg", "fol", "folga", "off", "dsr", "descanso", "d", "r", "repouso"]);
 const ehFolga = (v) => FOLGA.has(norm(v));
 function parseEscala(wb) {
-  const out = { porMat: new Map(), porGrupo: new Map(), porNome: new Map(), avisos: [], formatos: new Set() };
+  const out = { porMat: new Map(), porGrupo: new Map(), porNome: new Map(), membros: new Map(), avisos: [], formatos: new Set() };
   const addFolga = (mapa, k, d) => { if (!mapa.has(k)) mapa.set(k, { folgas: new Set() }); const e = mapa.get(k); if (!e.folgas) e.folgas = new Set(); e.folgas.add(d); };
   for (const name of wb.SheetNames) {
     if (/instru/i.test(name)) continue;
@@ -391,7 +393,19 @@ function parseEscala(wb) {
     // linha de cabeçalho: a primeira (entre as 15 primeiras) que tem Matrícula, Grupo ou Nome
     let hi = -1;
     for (let k = 0; k < Math.min(15, aoa.length); k++) { const m = mapHeaders(aoa[k].map((c) => String(c ?? ""))); if (m.matricula || m.grupo || m.nome) { hi = k; break; } }
-    if (hi < 0) continue;
+    if (hi < 0) { // calendário vertical: Data | A | B | C ... (uma coluna por turma, F nos dias de folga)
+      for (let k = 0; k < Math.min(15, aoa.length); k++) if (aoa[k].some((c) => ["data", "dia"].includes(norm(c)))) { hi = k; break; }
+      if (hi < 0) continue;
+      const head = aoa[hi].map((c) => String(c ?? "")), cD = head.findIndex((h) => ["data", "dia"].includes(norm(h)));
+      const rows = aoa.slice(hi + 1).map((r) => [parseDate(r[cD]), r]).filter(([d]) => d != null);
+      head.forEach((h, i) => {
+        if (i === cD || !h.trim() || !rows.some(([, r]) => ehFolga(r[i]))) return;
+        const k = keyGrupo(h); if (!out.porGrupo.has(k)) out.porGrupo.set(k, { folgas: new Set(), dias: [] });
+        const e = out.porGrupo.get(k); rows.forEach(([d, r]) => { e.dias.push(d); if (ehFolga(r[i])) e.folgas.add(d); });
+        out.formatos.add("folga por turma");
+      });
+      continue;
+    }
     const head = aoa[hi].map((c) => String(c ?? ""));
     const map = mapHeaders(head);
     const col = (f) => (map[f] != null ? head.indexOf(map[f]) : -1);
@@ -401,6 +415,8 @@ function parseEscala(wb) {
       : cNome >= 0 && String(r[cNome]).trim() ? ["nome", norm(r[cNome])] : null;
     const mapaDe = (tipo) => (tipo === "mat" ? out.porMat : tipo === "grupo" ? out.porGrupo : out.porNome);
     const usados = new Set(Object.values(map));
+    // aba de cadastro: Matrícula + Turma (sem datas) liga cada colaborador à sua turma
+    if (cMat >= 0 && cGrupo >= 0) aoa.slice(hi + 1).forEach((r) => { const m = keyMat(r[cMat]), g = String(r[cGrupo]).trim(); if (m && g && !separaGrupos(g)[1]) out.membros.set(m, g); });
     // colunas cujo cabeçalho é uma data => calendário (matriz)
     const datas = [];
     aoa[hi].forEach((c, i) => { if (usados.has(head[i])) return; const d = (typeof c === "number" && c > 30000 && c < 80000) || /^\d{1,2}[\/.\-]\d{1,2}[\/.\-]\d{2,4}$|^\d{4}-\d{1,2}-\d{1,2}/.test(String(c).trim()) ? parseDate(c) : null; if (d != null) datas.push([i, d]); });
@@ -427,6 +443,19 @@ function parseEscala(wb) {
       continue;
     }
     const cData = head.findIndex((h) => ["data", "dia", "datafolga", "datadafolga"].includes(norm(h)));
+    if (cData >= 0 && cMat < 0 && cNome < 0 && cGrupo >= 0) {
+      // folga por turma: Data | Turma de folga (uma ou mais turmas na célula, ou várias colunas de turma)
+      out.formatos.add("folga por turma");
+      const cols = head.map((h, i) => [h, i]).filter(([h, i]) => i === cGrupo || (i !== cData && /^(turma|grupo|equipe|folga)/.test(norm(h)))).map(([, i]) => i);
+      const diasAba = rows.map((r) => parseDate(r[cData])).filter((d) => d != null);
+      const tocados = new Set();
+      for (const r of rows) {
+        const d = parseDate(r[cData]); if (d == null) continue;
+        for (const i of cols) for (const g of separaGrupos(r[i])) { const k = keyGrupo(g); if (!k) continue; addFolga(out.porGrupo, k, d); tocados.add(k); }
+      }
+      for (const k of tocados) { const e = out.porGrupo.get(k); e.dias = (e.dias || []).concat(diasAba); }
+      continue;
+    }
     if (cData >= 0) {
       out.formatos.add("lista de folgas");
       const cTipo = head.findIndex((h) => ["tipo", "situacao", "status", "ocorrencia", "marcacao"].includes(norm(h)));
@@ -434,6 +463,8 @@ function parseEscala(wb) {
     }
   }
   for (const m of [out.porMat, out.porGrupo, out.porNome]) for (const e of m.values()) if (e.folgas) { const ds = e.dias && e.dias.length ? e.dias : [...e.folgas]; e.min = Math.min(...ds); e.max = Math.max(...ds); }
+  for (const [k, e] of out.porGrupo) if (e.folgas && e.folgas.size >= 2 && ![...e.folgas].some((d) => e.folgas.has(d + 1) && e.folgas.has(d - 1)))
+    out.avisos.push(`A turma ${k.toUpperCase()} tem só dias de folga soltos na escala. Para achar o meio da folga, liste todos os dias em que a turma está de folga (na 6x4, os 4 dias).`);
   if (!out.porMat.size && !out.porGrupo.size && !out.porNome.size) out.avisos.push("Não reconheci a planilha de escala. Ela precisa de uma coluna Matrícula (ou Grupo/Turma) e: Escala + Início da Escala, ou uma coluna Data com as folgas, ou um calendário com as datas no cabeçalho e F nos dias de folga. Veja o Modelo de escala.");
   return out;
 }
@@ -459,15 +490,19 @@ function folgaFn(row, folgasExplicitas, esc = escalaDados) {
   if (esc) {
     const em = esc.porMat.get(keyMat(row.matricula));
     if (em) return em.folgas ? deSet(em, "calendário da escala") : deCiclo(em, "planilha de escala");
-    const eg = row.grupo ? esc.porGrupo.get(keyGrupo(row.grupo)) : null;
-    if (eg) return eg.folgas ? deSet(eg, `grupo ${row.grupo}`) : deCiclo(eg, `grupo ${row.grupo}`);
+    const grupo = row.grupo || esc.membros.get(keyMat(row.matricula)) || "";
+    const eg = grupo ? esc.porGrupo.get(keyGrupo(grupo)) : null;
+    if (eg) return eg.folgas ? deSet(eg, `turma ${grupo}`) : deCiclo(eg, `turma ${grupo}`);
+    if (grupo && esc.porGrupo.size) return { erro: `A turma ${grupo} não aparece na escala de folgas` };
     const en = row.nome ? esc.porNome.get(norm(row.nome)) : null;
     if (en) return en.folgas ? deSet(en, "calendário da escala") : deCiclo(en, "planilha de escala");
   }
   const exp = folgasExplicitas.get(keyMat(row.matricula));
   if (exp && exp.size) return { off: (d) => exp.has(d), cobre: [Math.min(...exp), Math.max(...exp)], rotulo: "aba Folgas" };
   const r = folgaCiclo(row, "");
-  if (r.erro && esc) r.erro = "Colaborador não encontrado na planilha de escala (nem pela matrícula, nem pelo grupo, nem pelo nome)";
+  if (r.erro && esc) r.erro = esc.porGrupo.size && !esc.porMat.size
+    ? "Não sei a turma deste colaborador: inclua a coluna Turma na planilha de treinamentos (ou uma aba Matrícula + Turma na planilha de escala)"
+    : "Colaborador não encontrado na planilha de escala (nem pela matrícula, nem pela turma, nem pelo nome)";
   return r;
 }
 function folgaCiclo(row, origem) {
@@ -632,14 +667,15 @@ function exemplo() {
   const hoje = todayDay(); const rows = [];
   for (let i = 0; i < 120; i++) {
     const [setor, funcao, nrs] = pick(setores); const escala = pick(escalas);
-    const base = hoje - Math.floor(rnd() * 10);
+    const grupo = pick(["A", "B", "C", "D", "E"]);
+    const base = toDay(2026, 11, 8) - 6 + 2 * ["D", "E", "A", "B", "C"].indexOf(grupo); // turma D de folga a partir de 08/11
     const nome = `${pick(nomes)} ${pick(sobren)} ${pick(sobren)}`;
     const qtd = rnd() < 0.55 ? 2 : 1;
     for (let k = 0; k < qtd; k++) {
       const nr = nrs[k];
       const venc = hoje - 20 + Math.floor(rnd() * 140);
       const ultimo = addMonths(venc, -(VALIDADE_PADRAO[nr] || 24));
-      rows.push({ linha: rows.length + 2, matricula: String(10200 + i), nome, setor, funcao, nr, ultimo, vencimento: venc, escala, base });
+      rows.push({ linha: rows.length + 2, matricula: String(10200 + i), nome, setor, funcao, nr, ultimo, vencimento: venc, escala: "", base, grupo });
     }
   }
   return { rows, folgas: new Map(), feriados: [], avisos: [] };
@@ -671,13 +707,19 @@ function gerar() {
   resultado = planejar(dados, cfg);
   const R = resultado;
   const fonte = fonteNome ? `Fonte: <b>${esc(fonteNome)}</b> · ${dados.rows.length} linhas` : `<span class="tag-example">Dados de exemplo</span> Carregue sua planilha para ver os seus colaboradores.`;
-  const fonteEsc = escalaDados ? ` · Escala: <b>${esc(escalaNome)}</b> (${escalaDados.porMat.size ? escalaDados.porMat.size + " colaboradores" : ""}${escalaDados.porMat.size && escalaDados.porGrupo.size ? ", " : ""}${escalaDados.porGrupo.size ? escalaDados.porGrupo.size + " grupos" : ""}${escalaDados.porNome.size ? (escalaDados.porMat.size || escalaDados.porGrupo.size ? ", " : "") + escalaDados.porNome.size + " por nome" : ""})` : fonteNome ? " · Escala: colunas da planilha de treinamentos" : "";
+  const E = escalaDados;
+  const partes = E ? [E.porGrupo.size && `${E.porGrupo.size} turmas (${[...E.porGrupo.keys()].map((k) => k.toUpperCase()).sort().join(", ")})`, E.membros.size && `${E.membros.size} colaboradores ligados a turmas`, E.porMat.size && `${E.porMat.size} colaboradores`, E.porNome.size && `${E.porNome.size} por nome`].filter(Boolean) : [];
+  const fonteEsc = E ? ` · Escala: <b>${esc(escalaNome)}</b> (${esc(partes.join(", "))})` : fonteNome ? " · Escala: colunas da planilha de treinamentos" : "";
   $("fonte").innerHTML = `${fonte}${fonteEsc} · Período: <b>${fmt(R.inicio)}</b> a <b>${fmt(R.fim)}</b>`;
   const avisos = [...dados.avisos, ...(escalaDados ? escalaDados.avisos : [])];
   if (dados.semEscala && !escalaDados) avisos.push("Não há escala para estes colaboradores. Carregue a planilha de escala (botão Carregar escala) ou inclua as colunas Escala e Início da Escala.");
   if (escalaDados) {
     const semEsc = new Set(R.itens.filter((i) => /não encontrado na planilha de escala/.test(i.motivo)).map((i) => i.matricula));
     if (semEsc.size) avisos.push(`${semEsc.size} colaborador(es) não foram encontrados na planilha de escala: ${[...semEsc].slice(0, 12).join(", ")}${semEsc.size > 12 ? "…" : ""}. Confira as matrículas.`);
+    const semTurma = new Set(R.itens.filter((i) => /Não sei a turma/.test(i.motivo)).map((i) => i.matricula));
+    if (semTurma.size) avisos.push(`${semTurma.size} colaborador(es) sem turma informada (${[...semTurma].slice(0, 12).join(", ")}${semTurma.size > 12 ? "…" : ""}). A escala é por turma, então inclua a coluna Turma na planilha de treinamentos ou uma aba com Matrícula e Turma na planilha de escala.`);
+    const turmaFora = [...new Set(R.itens.map((i) => (i.motivo.match(/^A turma (.+) não aparece na escala/) || [])[1]).filter(Boolean))];
+    if (turmaFora.length) avisos.push(`Turma(s) ${turmaFora.join(", ")} não aparecem na escala de folgas. Confira se o nome da turma é o mesmo nas duas planilhas.`);
   }
   $("avisos").innerHTML = avisos.map((a) => `<div class="msg">${esc(a)}</div>`).join("");
 
@@ -764,12 +806,12 @@ function exportar() {
 function modelo() {
   const wb = XLSX.utils.book_new();
   const ws = XLSX.utils.aoa_to_sheet([
-    ["Matrícula", "Nome", "Setor", "Função", "NR", "Data Último Treinamento", "Vencimento", "Escala", "Início da Escala"],
-    ["10001", "Maria Exemplo", "Manutenção", "Eletricista", "NR-10", "15/01/2025", "15/01/2027", "14x14", "02/11/2026"],
-    ["10001", "Maria Exemplo", "Manutenção", "Eletricista", "NR-35", "20/12/2024", "", "14x14", "02/11/2026"],
-    ["10002", "José Exemplo", "Operação", "Operador", "NR-33", "10/02/2026", "", "7x7", "05/11/2026"],
+    ["Matrícula", "Nome", "Setor", "Função", "Turma", "NR", "Data Último Treinamento", "Vencimento"],
+    ["10001", "Maria Exemplo", "Manutenção", "Eletricista", "A", "NR-10", "15/01/2025", "15/01/2027"],
+    ["10001", "Maria Exemplo", "Manutenção", "Eletricista", "A", "NR-35", "20/12/2024", ""],
+    ["10002", "José Exemplo", "Operação", "Operador", "D", "NR-33", "10/02/2026", ""],
   ]);
-  ws["!cols"] = [10, 26, 18, 16, 8, 22, 12, 9, 16].map((w) => ({ wch: w }));
+  ws["!cols"] = [10, 26, 18, 16, 7, 8, 22, 12].map((w) => ({ wch: w }));
   XLSX.utils.book_append_sheet(wb, ws, "Colaboradores");
   XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([["Matrícula", "Data"], ["10003", "18/11/2026"], ["10003", "19/11/2026"], ["10003", "20/11/2026"]]), "Folgas");
   XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([["Data", "Descrição"], ["25/01/2027", "Aniversário da cidade"]]), "Feriados");
@@ -788,28 +830,26 @@ function modelo() {
 function modeloEscala() {
   const wb = XLSX.utils.book_new();
   const ano = ymd(todayDay())[0] + 1;
-  const ciclo = XLSX.utils.aoa_to_sheet([
-    ["Matrícula", "Nome", "Escala", "Início da Folga"],
-    ["10001", "Maria Exemplo", "6x4", `07/01/${ano}`],
-    ["10002", "José Exemplo", "6x4", `03/01/${ano}`],
-  ]);
-  ciclo["!cols"] = [10, 24, 9, 16].map((w) => ({ wch: w }));
-  XLSX.utils.book_append_sheet(wb, ciclo, "Escala por colaborador");
-  const linha = (mat, nome, desloc) => [mat, nome, ...Array.from({ length: 31 }, (_, k) => ((k + desloc) % 10 >= 6 ? "F" : "T"))];
-  const cal = XLSX.utils.aoa_to_sheet([["Matrícula", "Nome", ...Array.from({ length: 31 }, (_, k) => k + 1)], linha("10003", "Ana Exemplo", 0), linha("10004", "Rui Exemplo", 3), linha("10005", "Lia Exemplo", 7)]);
-  cal["!cols"] = [{ wch: 10 }, { wch: 18 }, ...Array.from({ length: 31 }, () => ({ wch: 3 }))];
-  XLSX.utils.book_append_sheet(wb, cal, `Janeiro ${ano}`);
+  // exemplo: 5 turmas em 6x4, cada turma começa a folga 2 dias depois da anterior (turma D de folga a partir de 08/11)
+  const ordem = ["D", "E", "A", "B", "C"], ref = toDay(2026, 11, 8);
+  const linhas = [["Data", "Turma de folga"]];
+  const [ya, ma] = ymd(todayDay());
+  for (let d = toDay(ya, ma, 1); d <= toDay(ano, 12, 31); d++) {
+    const de = ordem.filter((g, k) => ((((d - ref - 2 * k) % 10) + 10) % 10) < 4).sort();
+    linhas.push([fmt(d), de.join(" e ")]);
+  }
+  const folga = XLSX.utils.aoa_to_sheet(linhas);
+  folga["!cols"] = [{ wch: 12 }, { wch: 16 }];
+  XLSX.utils.book_append_sheet(wb, folga, "Folga por turma");
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([["Matrícula", "Nome", "Turma"], ["10001", "Maria Exemplo", "A"], ["10002", "José Exemplo", "D"]]), "Turmas dos colaboradores");
   XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([
     ["Planilha de escala (atualize todo ano, sem mexer na de treinamentos)"],
-    ["Use a forma que for mais fácil (pode misturar em abas diferentes) e apague os exemplos."],
-    ["1) Escala por colaborador: Matrícula, Escala (6x4 = 6 dias de trabalho e 4 de folga) e Início da Folga (qualquer data que foi o 1º dia de folga do colaborador)."],
-    ["   Se todos são 6x4, a coluna Escala pode ficar vazia ou nem existir: vale a Escala padrão da tela. No lugar de Início da Folga também vale Início da Escala (1º dia de trabalho)."],
-    ["2) Escala mensal (uma aba por mês, nome da aba = mês e ano, ex. Janeiro 2027): Matrícula e Nome nas linhas, dias 1 a 31 nas colunas, F nos dias de folga e qualquer outra coisa (T, horário, vazio) nos dias de trabalho."],
-    ["   Use esta forma quando as folgas mudam (sem turno fixo): o programa lê exatamente os dias de folga marcados."],
-    ["3) Por grupo: Grupo (ou Turma/Letra), Escala e Início da Folga; na planilha de treinamentos, inclua a coluna Grupo."],
-    ["4) Lista: colunas Matrícula e Data, uma linha por dia de folga."],
-    ["Sem matrícula na escala, o programa tenta achar o colaborador pelo nome."],
-    ["A planilha de escala tem prioridade sobre as colunas Escala/Início da planilha de treinamentos."],
+    ["Aba Folga por turma: uma linha por dia, com a data e a(s) turma(s) que estão de folga naquele dia (ex.: 08/11/2026 | D). Mais de uma turma na mesma célula: separe com \"e\", vírgula ou barra (ex.: A e D)."],
+    ["Liste todos os dias de folga de cada turma (na 6x4, os 4 dias seguidos), para o programa saber qual é o 1º e o último dia da folga."],
+    ["Os dados desta aba são só um exemplo de rodízio com 5 turmas. Substitua pela escala real."],
+    ["Aba Turmas dos colaboradores (opcional): Matrícula e Turma de cada um. Não precisa se a planilha de treinamentos já tiver a coluna Turma."],
+    ["Também funciona um calendário com uma coluna por turma (Data | A | B | C ...) e F nos dias de folga."],
+    ["Outras formas aceitas: escala por colaborador (Matrícula, Escala, Início da Folga), escala mensal (dias 1 a 31 nas colunas, F nos dias de folga) e lista (Matrícula, Data)."],
   ]), "Instruções");
   salvar(wb, `modelo-escala-${ano}.xlsx`);
 }
