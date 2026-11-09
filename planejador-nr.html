@@ -1,0 +1,661 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Planejador de Turmas NR</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@500;700;800&family=Public+Sans:wght@400;500;600&display=swap">
+<style>
+/* Layout: barra de controle no topo, resumo em números, abas (Turmas / Vencimentos / Pendências) com tabelas roláveis */
+:root {
+  --bg: #f5f6f3;
+  --surface: #ffffff;
+  --ink: #1d2422;
+  --muted: #5d6763;
+  --line: #d9ddd7;
+  --accent: #1f5c4d;
+  --accent-ink: #ffffff;
+  --signal: #f2b705;
+  --ok: #217a45;
+  --ok-bg: #e2f2e7;
+  --warn: #8a5a00;
+  --warn-bg: #fdf1cf;
+  --bad: #a3271f;
+  --bad-bg: #fbe3e0;
+  --font-display: "Archivo", "Arial Narrow", system-ui, sans-serif;
+  --font-body: "Public Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #141917; --surface: #1c2220; --ink: #e8ece9; --muted: #9aa5a0; --line: #2f3834;
+    --accent: #5fbfa3; --accent-ink: #0d1412; --signal: #f2c230;
+    --ok: #74d39a; --ok-bg: #1b3326; --warn: #f2c94c; --warn-bg: #3a3014; --bad: #ff8f84; --bad-bg: #3d1f1c;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #141917; --surface: #1c2220; --ink: #e8ece9; --muted: #9aa5a0; --line: #2f3834;
+  --accent: #5fbfa3; --accent-ink: #0d1412; --signal: #f2c230;
+  --ok: #74d39a; --ok-bg: #1b3326; --warn: #f2c94c; --warn-bg: #3a3014; --bad: #ff8f84; --bad-bg: #3d1f1c;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; }
+body {
+  background: var(--bg); color: var(--ink); font-family: var(--font-body); font-size: 15px; line-height: 1.5;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  padding-block: 20px 48px;
+}
+.wrap { max-width: 1180px; margin: 0 auto; display: flex; flex-direction: column; gap: 20px; }
+h1, h2, h3 { font-family: var(--font-display); text-wrap: balance; margin: 0; line-height: 1.15; }
+h1 { font-size: 1.9rem; font-weight: 800; letter-spacing: -0.01em; }
+h2 { font-size: 1.2rem; font-weight: 700; }
+h3 { font-size: 1rem; font-weight: 700; }
+.head { display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: 12px; }
+.head p { margin: 4px 0 0; color: var(--muted); max-width: 68ch; }
+.stripe { height: 6px; border-radius: 3px; background: repeating-linear-gradient(-45deg, var(--signal) 0 10px, var(--ink) 10px 20px); opacity: .9; }
+.panel { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 16px; }
+.controls { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 12px 16px; align-items: end; }
+.field { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.field label, .lbl { font-size: .75rem; font-weight: 600; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); }
+input[type="number"], input[type="date"], input[type="search"], select {
+  font: inherit; color: var(--ink); background: var(--bg); border: 1px solid var(--line); border-radius: 6px; padding: 7px 9px; width: 100%;
+}
+input:focus-visible, select:focus-visible, button:focus-visible, summary:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.check { display: flex; align-items: center; gap: 8px; font-size: .9rem; }
+.actions { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+button, .filebtn {
+  font: inherit; font-weight: 600; border-radius: 6px; padding: 8px 14px; cursor: pointer; border: 1px solid var(--line);
+  background: var(--surface); color: var(--ink);
+}
+button.primary, .filebtn { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
+button:hover, .filebtn:hover { filter: brightness(1.06); }
+.filebtn input { display: none; }
+.source { font-size: .9rem; color: var(--muted); }
+.source b { color: var(--ink); }
+.tag-example { display: inline-block; font-size: .72rem; font-weight: 700; text-transform: uppercase; letter-spacing: .05em; background: var(--warn-bg); color: var(--warn); padding: 2px 8px; border-radius: 999px; }
+.stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 12px; }
+.stat { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 12px 14px; }
+.stat .n { font-family: var(--font-display); font-size: 2rem; font-weight: 800; font-variant-numeric: tabular-nums; line-height: 1.1; }
+.stat .t { font-size: .85rem; color: var(--muted); }
+.stat.bad .n { color: var(--bad); }
+.stat.warn .n { color: var(--warn); }
+.tabs { display: flex; flex-wrap: wrap; gap: 4px; border-bottom: 1px solid var(--line); }
+.tabs button { border: none; border-bottom: 3px solid transparent; border-radius: 0; background: none; padding: 8px 12px; color: var(--muted); }
+.tabs button[aria-selected="true"] { color: var(--ink); border-bottom-color: var(--signal); }
+.tabs .count { font-variant-numeric: tabular-nums; font-weight: 500; opacity: .8; }
+.view { display: flex; flex-direction: column; gap: 14px; }
+.week { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; overflow: hidden; }
+.week-h { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; padding: 10px 14px; border-bottom: 1px solid var(--line); }
+.week-h .range { color: var(--muted); font-size: .9rem; }
+.pill { display: inline-block; font-size: .75rem; font-weight: 700; padding: 2px 9px; border-radius: 999px; white-space: nowrap; }
+.pill.ok { background: var(--ok-bg); color: var(--ok); }
+.pill.warn { background: var(--warn-bg); color: var(--warn); }
+.pill.bad { background: var(--bad-bg); color: var(--bad); }
+.pill.neutral { background: var(--bg); color: var(--muted); border: 1px solid var(--line); }
+.turma { border-top: 1px solid var(--line); }
+.turma:first-of-type { border-top: none; }
+.turma summary { list-style: none; cursor: pointer; display: grid; grid-template-columns: 4rem 9.5rem 1fr auto; gap: 10px; align-items: center; padding: 10px 14px; }
+.turma summary::-webkit-details-marker { display: none; }
+.turma summary:hover { background: var(--bg); }
+.turma .code { font-family: var(--font-display); font-weight: 700; color: var(--muted); }
+.turma .date { font-weight: 600; font-variant-numeric: tabular-nums; }
+.turma .nr { font-family: var(--font-display); font-weight: 700; }
+.turma .members { padding: 0 14px 12px; }
+.empty-week { padding: 12px 14px; color: var(--muted); font-size: .9rem; }
+.tablewrap { overflow-x: auto; background: var(--surface); border: 1px solid var(--line); border-radius: 10px; }
+table { border-collapse: collapse; width: 100%; font-size: .9rem; }
+th, td { text-align: left; padding: 7px 12px; border-bottom: 1px solid var(--line); white-space: nowrap; }
+th { font-size: .72rem; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); font-weight: 600; background: var(--surface); position: sticky; top: 0; }
+td.num, td.dt { font-variant-numeric: tabular-nums; }
+td.wrap { white-space: normal; min-width: 18rem; }
+tr.month td { background: var(--bg); font-family: var(--font-display); font-weight: 700; font-size: .95rem; }
+.members table td, .members table th { padding: 5px 8px; }
+.filters { display: flex; flex-wrap: wrap; gap: 10px; }
+.filters .field { flex: 1 1 200px; }
+.rules { font-size: .9rem; color: var(--muted); }
+.rules ul { margin: 6px 0 0; padding-left: 20px; }
+details.cfg summary { cursor: pointer; font-weight: 600; }
+.cfg-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: 8px 12px; margin-top: 10px; }
+.msg { padding: 10px 14px; border-radius: 8px; background: var(--bad-bg); color: var(--bad); font-size: .9rem; }
+.msg.info { background: var(--warn-bg); color: var(--warn); }
+.toast { position: fixed; left: 50%; transform: translateX(-50%); bottom: calc(20px + env(safe-area-inset-bottom, 0px)); background: var(--ink); color: var(--bg); padding: 10px 16px; border-radius: 8px; font-size: .9rem; z-index: 20; }
+@media (max-width: 640px) {
+  .turma summary { grid-template-columns: 3.5rem 1fr auto; }
+  .turma summary .nr { grid-column: 2; grid-row: 2; }
+  h1 { font-size: 1.5rem; }
+}
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; animation: none !important; } }
+</style>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+</head>
+<body>
+<div class="wrap">
+  <header class="head">
+    <div>
+      <h1>Planejador de Turmas NR</h1>
+      <p>Mostra quem precisa reciclar treinamentos de NR nos próximos meses e monta as turmas em dias úteis que caem no meio da folga de cada colaborador.</p>
+    </div>
+    <div class="actions">
+      <label class="filebtn" for="arquivo">Carregar planilha
+        <input type="file" id="arquivo" accept=".xlsx,.xls,.csv">
+      </label>
+      <button type="button" id="btnModelo">Baixar modelo</button>
+    </div>
+  </header>
+  <div class="stripe" aria-hidden="true"></div>
+
+  <section class="panel" aria-label="Configurações">
+    <div class="controls">
+      <div class="field"><label for="inicio">Planejar a partir de</label><input type="date" id="inicio"></div>
+      <div class="field"><label for="meses">Meses à frente</label><input type="number" id="meses" min="1" max="24" value="3"></div>
+      <div class="field"><label for="antecedencia">Antecedência máxima (dias)</label><input type="number" id="antecedencia" min="0" max="365" value="90"></div>
+      <div class="field"><label for="capMax">Vagas por turma</label><input type="number" id="capMax" min="1" max="200" value="20"></div>
+      <div class="field"><label for="capMin">Mínimo por turma</label><input type="number" id="capMin" min="1" max="200" value="3"></div>
+      <div class="field"><label for="porSemana">Turmas por semana (mín.)</label><input type="number" id="porSemana" min="0" max="10" value="2"></div>
+      <label class="check"><input type="checkbox" id="feriadosNac" checked> Pular feriados nacionais</label>
+      <button type="button" class="primary" id="btnGerar">Montar turmas</button>
+    </div>
+    <details class="cfg" style="margin-top:14px">
+      <summary>Validade de cada NR (usada quando a planilha não tem a data de vencimento)</summary>
+      <div class="cfg-grid" id="validades"></div>
+    </details>
+  </section>
+
+  <div class="actions" style="justify-content:space-between">
+    <div class="source" id="fonte"></div>
+    <button type="button" id="btnExportar">Exportar resultado (Excel)</button>
+  </div>
+  <div id="avisos" class="view"></div>
+
+  <section class="stats" id="stats" aria-label="Resumo"></section>
+
+  <nav class="tabs" role="tablist">
+    <button type="button" role="tab" data-tab="turmas" aria-selected="true">Turmas <span class="count" id="cTurmas"></span></button>
+    <button type="button" role="tab" data-tab="vencimentos" aria-selected="false">A vencer <span class="count" id="cVenc"></span></button>
+    <button type="button" role="tab" data-tab="pendencias" aria-selected="false">Sem turma <span class="count" id="cPend"></span></button>
+    <button type="button" role="tab" data-tab="regras" aria-selected="false">Como funciona</button>
+  </nav>
+
+  <section class="view" id="tab-turmas"></section>
+  <section class="view" id="tab-vencimentos" hidden>
+    <div class="filters">
+      <div class="field"><label for="busca">Buscar</label><input type="search" id="busca" placeholder="Nome, matrícula ou setor"></div>
+      <div class="field"><label for="filtroNR">NR</label><select id="filtroNR"></select></div>
+    </div>
+    <div class="tablewrap"><table id="tblVenc"></table></div>
+  </section>
+  <section class="view" id="tab-pendencias" hidden>
+    <div class="tablewrap"><table id="tblPend"></table></div>
+  </section>
+  <section class="view rules" id="tab-regras" hidden>
+    <div class="panel">
+      <h2>Regras usadas para montar as turmas</h2>
+      <ul>
+        <li>Entra na lista quem tem treinamento vencido ou vencendo até o fim do período planejado.</li>
+        <li>Treinamento só de segunda a sexta, sem feriados (nacionais e os da aba <b>Feriados</b>).</li>
+        <li>O treinamento cai numa folga do colaborador, nunca no primeiro nem no último dia daquele bloco de folga. Por isso escalas com folgas de 1 ou 2 dias (ex.: 5x2, 6x1) não têm data possível.</li>
+        <li>A data fica entre o início da janela de antecedência e o dia anterior ao vencimento. Quem já está vencido pode ser chamado em qualquer data do período, com prioridade.</li>
+        <li>Quem vence primeiro é encaixado primeiro. Cada turma escolhe o dia que reúne mais colaboradores da mesma NR, até o limite de vagas.</li>
+        <li>Depois o programa tenta garantir o mínimo de turmas por semana, movendo colaboradores que também podem ir naquela semana, sem deixar a turma de origem abaixo do mínimo. Semanas onde não deu ficam marcadas.</li>
+        <li>Ninguém faz dois treinamentos no mesmo dia.</li>
+      </ul>
+    </div>
+    <div class="panel">
+      <h2>Como montar a planilha</h2>
+      <p>Uma linha por colaborador e por NR. Clique em <b>Baixar modelo</b> para ter o arquivo pronto. Colunas reconhecidas (maiúsculas e acentos não importam):</p>
+      <ul>
+        <li><b>Matrícula</b>, <b>Nome</b>, <b>Setor</b>, <b>Função</b></li>
+        <li><b>NR</b>: ex. NR-10, NR 35, NR-33</li>
+        <li><b>Data Último Treinamento</b> e/ou <b>Vencimento</b>. Sem vencimento, ele é calculado pela validade configurada acima.</li>
+        <li><b>Escala</b>: dias trabalhados x dias de folga, ex. 14x14, 7x7, 14x7, 4x4</li>
+        <li><b>Início da Escala</b>: uma data que foi o 1º dia de trabalho de um ciclo</li>
+      </ul>
+      <p>Abas opcionais: <b>Folgas</b> (Matrícula, Data), com cada dia de folga quando a escala é irregular, e <b>Feriados</b> (Data, Descrição) para feriados locais.</p>
+      <p>Os dados ficam só no seu navegador; nada é enviado para fora.</p>
+    </div>
+  </section>
+</div>
+<div class="toast" id="toast" hidden></div>
+
+<script>
+"use strict";
+// ---------- datas como número de dias (UTC) ----------
+const DAY = 86400000;
+const toDay = (y, m, d) => Math.floor(Date.UTC(y, m - 1, d) / DAY);
+const ymd = (n) => { const dt = new Date(n * DAY); return [dt.getUTCFullYear(), dt.getUTCMonth() + 1, dt.getUTCDate()]; };
+const dow = (n) => (n + 4) % 7; // 0 = domingo
+const monday = (n) => n - ((dow(n) + 6) % 7);
+const pad = (x) => String(x).padStart(2, "0");
+const fmt = (n) => { if (n == null) return ""; const [y, m, d] = ymd(n); return `${pad(d)}/${pad(m)}/${y}`; };
+const fmtShort = (n) => { const [, m, d] = ymd(n); return `${pad(d)}/${pad(m)}`; };
+const DOW = ["Dom", "Seg", "Ter", "Qua", "Qui", "Sex", "Sáb"];
+const MESES = ["janeiro", "fevereiro", "março", "abril", "maio", "junho", "julho", "agosto", "setembro", "outubro", "novembro", "dezembro"];
+function addMonths(n, k) {
+  let [y, m, d] = ymd(n); m += k;
+  y += Math.floor((m - 1) / 12); m = ((m - 1) % 12 + 12) % 12 + 1;
+  const last = new Date(Date.UTC(y, m, 0)).getUTCDate();
+  return toDay(y, m, Math.min(d, last));
+}
+const todayDay = () => { const t = new Date(); return toDay(t.getFullYear(), t.getMonth() + 1, t.getDate()); };
+function parseDate(v) {
+  if (v == null || v === "") return null;
+  if (typeof v === "number" && isFinite(v)) return Math.floor(v) - 25569; // serial do Excel
+  if (v instanceof Date && !isNaN(v)) return toDay(v.getFullYear(), v.getMonth() + 1, v.getDate());
+  const s = String(v).trim();
+  let m = s.match(/^(\d{1,2})[\/.\-](\d{1,2})[\/.\-](\d{2,4})/);
+  if (m) { let y = +m[3]; if (y < 100) y += 2000; return toDay(y, +m[2], +m[1]); }
+  m = s.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/);
+  if (m) return toDay(+m[1], +m[2], +m[3]);
+  if (/^\d+(\.\d+)?$/.test(s)) return Math.floor(+s) - 25569;
+  return null;
+}
+
+// ---------- feriados nacionais ----------
+function easter(y) {
+  const a = y % 19, b = Math.floor(y / 100), c = y % 100, d = Math.floor(b / 4), e = b % 4, f = Math.floor((b + 8) / 25),
+    g = Math.floor((b - f + 1) / 3), h = (19 * a + b - d - g + 15) % 30, i = Math.floor(c / 4), k = c % 4,
+    l = (32 + 2 * e + 2 * i - h - k) % 7, m = Math.floor((a + 11 * h + 22 * l) / 451),
+    month = Math.floor((h + l - 7 * m + 114) / 31), day = ((h + l - 7 * m + 114) % 31) + 1;
+  return toDay(y, month, day);
+}
+function nationalHolidays(y) {
+  const e = easter(y);
+  return [
+    [toDay(y, 1, 1), "Confraternização Universal"], [e - 48, "Carnaval"], [e - 47, "Carnaval"], [e - 2, "Sexta-feira Santa"],
+    [toDay(y, 4, 21), "Tiradentes"], [toDay(y, 5, 1), "Dia do Trabalho"], [e + 60, "Corpus Christi"],
+    [toDay(y, 9, 7), "Independência"], [toDay(y, 10, 12), "N. Sra. Aparecida"], [toDay(y, 11, 2), "Finados"],
+    [toDay(y, 11, 15), "Proclamação da República"], [toDay(y, 11, 20), "Consciência Negra"], [toDay(y, 12, 25), "Natal"],
+  ];
+}
+
+// ---------- validades padrão (meses) ----------
+const VALIDADE_PADRAO = { "NR-05": 12, "NR-10": 24, "NR-11": 12, "NR-12": 24, "NR-13": 24, "NR-18": 24, "NR-20": 12, "NR-23": 12, "NR-33": 12, "NR-35": 24 };
+const validades = { ...VALIDADE_PADRAO };
+
+function normNR(v) {
+  const s = String(v || "").trim();
+  const m = s.match(/^n\s*r\s*[-.\s]?\s*0*(\d+)\s*(.*)$/i);
+  if (!m) return s.toUpperCase();
+  const rest = m[2].replace(/^[-–:\s]+/, "").trim();
+  return `NR-${pad(m[1])}${rest ? " " + rest.toUpperCase() : ""}`;
+}
+const baseNR = (nr) => (nr.match(/^NR-\d+/) || [nr])[0];
+
+// ---------- leitura da planilha ----------
+const norm = (s) => String(s).normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase().replace(/[^a-z0-9]/g, "");
+const COLS = {
+  matricula: ["matricula", "mat", "registro", "re", "chapa", "codigo", "id", "cracha"],
+  nome: ["nome", "colaborador", "funcionario", "nomecompleto", "empregado"],
+  setor: ["setor", "area", "departamento", "centrodecusto", "gerencia"],
+  funcao: ["funcao", "cargo"],
+  nr: ["nr", "treinamento", "norma", "curso", "normaregulamentadora"],
+  ultimo: ["dataultimotreinamento", "ultimotreinamento", "datadoultimotreinamento", "datatreinamento", "realizadoem", "dataderealizacao", "datarealizacao", "realizacao", "conclusao", "dataconclusao"],
+  vencimento: ["vencimento", "datavencimento", "datadevencimento", "validade", "venceem", "datavalidade", "proximovencimento"],
+  escala: ["escala", "turno", "regime", "escaladetrabalho"],
+  base: ["inicioescala", "iniciodaescala", "database", "databaseescala", "iniciociclo", "iniciodociclo", "referenciaescala", "primeirodiadetrabalho", "inicio"],
+  data: ["data", "dia", "datafolga", "dataferiado"],
+  descricao: ["descricao", "feriado", "nome", "motivo"],
+};
+function mapHeaders(headers) {
+  const map = {}; const keys = headers.map((h) => [h, norm(h)]);
+  for (const [field, aliases] of Object.entries(COLS)) {
+    for (const a of aliases) { const hit = keys.find(([, k]) => k === a); if (hit && !Object.values(map).includes(hit[0])) { map[field] = hit[0]; break; } }
+    if (!map[field] && field !== "data" && field !== "descricao") {
+      for (const a of aliases) { if (a.length < 4) continue; const hit = keys.find(([, k]) => k.includes(a)); if (hit && !Object.values(map).includes(hit[0])) { map[field] = hit[0]; break; } }
+    }
+  }
+  return map;
+}
+
+function parseWorkbook(wb) {
+  const out = { rows: [], folgas: new Map(), feriados: [], avisos: [] };
+  let main = null;
+  for (const name of wb.SheetNames) {
+    const json = XLSX.utils.sheet_to_json(wb.Sheets[name], { defval: "", raw: true });
+    if (!json.length) continue;
+    const map = mapHeaders(Object.keys(json[0]));
+    const n = norm(name);
+    if (n.includes("folga") && map.matricula) {
+      const dcol = map.data || map.ultimo || map.vencimento || map.base;
+      for (const r of json) { const mat = String(r[map.matricula]).trim(); const d = parseDate(r[dcol]); if (!mat || d == null) continue; if (!out.folgas.has(mat)) out.folgas.set(mat, new Set()); out.folgas.get(mat).add(d); }
+    } else if (n.includes("feriado")) {
+      const dcol = map.data || Object.keys(json[0])[0];
+      for (const r of json) { const d = parseDate(r[dcol]); if (d != null) out.feriados.push([d, String(r[map.descricao] || "Feriado")]); }
+    } else if (!main && map.nr && (map.nome || map.matricula)) {
+      main = { name, json, map };
+    }
+  }
+  if (!main) { out.avisos.push("Não encontrei uma aba com as colunas NR e Nome (ou Matrícula). Use o modelo como referência."); return out; }
+  const { json, map } = main;
+  const faltando = ["escala", "base"].filter((k) => !map[k]);
+  if (!map.vencimento && !map.ultimo) out.avisos.push("A planilha não tem coluna de Vencimento nem de Data do Último Treinamento.");
+  if (faltando.length && !out.folgas.size) out.avisos.push("Sem colunas de Escala e Início da Escala (nem aba Folgas): não dá para saber as folgas, então ninguém poderá ser encaixado.");
+  json.forEach((r, i) => {
+    const nr = normNR(r[map.nr]); if (!nr) return;
+    out.rows.push({
+      linha: i + 2,
+      matricula: String(r[map.matricula] ?? "").trim() || `L${i + 2}`,
+      nome: String(r[map.nome] ?? "").trim(),
+      setor: String(r[map.setor] ?? "").trim(),
+      funcao: String(r[map.funcao] ?? "").trim(),
+      nr,
+      ultimo: map.ultimo ? parseDate(r[map.ultimo]) : null,
+      vencimento: map.vencimento ? parseDate(r[map.vencimento]) : null,
+      escala: String(r[map.escala] ?? "").trim(),
+      base: map.base ? parseDate(r[map.base]) : null,
+    });
+  });
+  return out;
+}
+
+// ---------- folgas ----------
+function folgaFn(row, folgasExplicitas) {
+  const exp = folgasExplicitas.get(row.matricula);
+  if (exp && exp.size) return { off: (d) => exp.has(d) };
+  const m = row.escala.match(/(\d+)\s*[x×X\/]\s*(\d+)/);
+  if (!m) return { erro: "Escala não informada ou em formato desconhecido (use algo como 14x14)" };
+  const t = +m[1], f = +m[2];
+  if ((t === 12 && f === 36) || (t === 24 && (f === 48 || f === 72))) return { erro: `Escala ${t}x${f} é em horas e não tem folga de 3 dias ou mais. Informe as folgas na aba Folgas` };
+  if (row.base == null) return { erro: "Falta a data de início da escala" };
+  const ciclo = t + f;
+  return { off: (d) => (((d - row.base) % ciclo) + ciclo) % ciclo >= t, folgaDias: f };
+}
+
+// ---------- montagem ----------
+function planejar(dados, cfg) {
+  const inicio = cfg.inicio, fim = addMonths(cfg.inicio, cfg.meses) - 1;
+  const feriados = new Map();
+  if (cfg.feriadosNac) { const [y0] = ymd(inicio), [y1] = ymd(fim); for (let y = y0; y <= y1; y++) nationalHolidays(y).forEach(([d, n]) => feriados.set(d, n)); }
+  dados.feriados.forEach(([d, n]) => feriados.set(d, n));
+  const util = (d) => { const w = dow(d); return w >= 1 && w <= 5 && !feriados.has(d); };
+
+  const itens = [];
+  for (const r of dados.rows) {
+    let venc = r.vencimento;
+    if (venc == null && r.ultimo != null) { const meses = validades[baseNR(r.nr)]; if (meses) venc = addMonths(r.ultimo, meses); }
+    const item = { ...r, venc, status: "", turma: null, motivo: "", cands: [] };
+    if (venc == null) { item.status = "sem-data"; item.motivo = r.ultimo != null ? `Sem validade configurada para ${baseNR(r.nr)}` : "Sem data de vencimento nem do último treinamento"; itens.push(item); continue; }
+    if (venc > fim) continue; // fora do período
+    item.vencido = venc <= inicio;
+    item.status = item.vencido ? "vencido" : "a-vencer";
+    item.diasAte = venc - inicio;
+    const janIni = item.vencido ? inicio : Math.max(inicio, venc - cfg.antecedencia);
+    const janFim = item.vencido ? fim : Math.min(fim, venc - 1);
+    item.janela = [janIni, janFim];
+    const ff = folgaFn(r, dados.folgas);
+    if (ff.erro) { item.motivo = ff.erro; itens.push(item); continue; }
+    for (let d = janIni; d <= janFim; d++) if (util(d) && ff.off(d) && ff.off(d - 1) && ff.off(d + 1)) item.cands.push(d);
+    if (!item.cands.length) {
+      item.motivo = ff.folgaDias != null && ff.folgaDias < 3
+        ? `Escala ${r.escala} tem folga de ${ff.folgaDias} dia(s): não existe dia de folga que não seja o primeiro ou o último`
+        : `Nenhum dia útil no meio da folga entre ${fmt(janIni)} e ${fmt(janFim)}`;
+    }
+    itens.push(item);
+  }
+
+  const ativos = itens.filter((i) => i.cands.length);
+  ativos.forEach((i, k) => { i.id = k; i.candSet = new Set(i.cands); });
+  const ocupado = new Map(); // matricula -> Set(dias)
+  const isBusy = (it, d) => ocupado.get(it.matricula)?.has(d);
+  const mark = (it, d, on) => { if (!ocupado.has(it.matricula)) ocupado.set(it.matricula, new Set()); on ? ocupado.get(it.matricula).add(d) : ocupado.get(it.matricula).delete(d); };
+  const turmas = [];
+  const turmaKey = new Map(); // nr|dia -> turma
+  const add = (t, it) => { t.membros.push(it); it.turma = t; mark(it, t.dia, true); };
+  const remove = (t, it) => { t.membros = t.membros.filter((x) => x !== it); it.turma = null; mark(it, t.dia, false); };
+
+  const fila = [...ativos].sort((a, b) => (a.janela[1] - b.janela[1]) || (a.venc - b.venc));
+  for (const u of fila) {
+    if (u.turma) continue;
+    const livres = u.cands.filter((d) => !isBusy(u, d));
+    if (!livres.length) { u.motivo = "Todas as datas possíveis já estão ocupadas com outro treinamento"; continue; }
+    // 1) turma existente com vaga
+    let alvo = null;
+    for (const d of livres) { const t = turmaKey.get(u.nr + "|" + d); if (t && t.membros.length < cfg.capMax && (!alvo || t.membros.length > alvo.membros.length)) alvo = t; }
+    if (alvo) { add(alvo, u); continue; }
+    // 2) nova turma no dia que junta mais gente da mesma NR
+    let best = null, bestN = -1;
+    for (const d of livres) {
+      let n = 0; for (const o of fila) if (!o.turma && o.nr === u.nr && o.candSet.has(d) && !isBusy(o, d)) n++;
+      if (n >= bestN) { best = d; bestN = n; } // empate: data mais perto do vencimento
+    }
+    const t = { nr: u.nr, dia: best, membros: [] }; turmas.push(t); turmaKey.set(u.nr + "|" + best, t);
+    add(t, u);
+    for (const o of fila) { if (t.membros.length >= cfg.capMax) break; if (o !== u && !o.turma && o.nr === u.nr && o.candSet.has(best) && !isBusy(o, best)) add(t, o); }
+  }
+
+  // semanas do período
+  const semanas = [];
+  for (let w = monday(inicio); w <= fim; w += 7) semanas.push(w);
+  const porSemana = (w) => turmas.filter((t) => t.membros.length && monday(t.dia) === w).length;
+
+  // 3) garantir mínimo de turmas por semana
+  if (cfg.porSemana > 0) {
+    for (const w of semanas) {
+      let guard = 0;
+      while (porSemana(w) < cfg.porSemana && guard++ < 20) {
+        let melhor = null;
+        const nrs = [...new Set(ativos.map((i) => i.nr))];
+        for (let d = Math.max(w, inicio); d <= Math.min(w + 4, fim); d++) {
+          for (const nr of nrs) {
+            if (turmaKey.has(nr + "|" + d) && turmaKey.get(nr + "|" + d).membros.length) continue;
+            // simula quem pode mudar para (nr, d)
+            const tamanho = new Map(turmas.map((t) => [t, t.membros.length]));
+            const mov = [];
+            const cands = ativos.filter((i) => i.turma && i.nr === nr && i.candSet.has(d) && !isBusy(i, d))
+              .sort((a, b) => tamanho.get(b.turma) - tamanho.get(a.turma));
+            for (const i of cands) {
+              if (mov.length >= cfg.capMax) break;
+              const origemSemana = monday(i.turma.dia);
+              const deixaVazia = tamanho.get(i.turma) - 1 === 0;
+              if (tamanho.get(i.turma) - 1 >= cfg.capMin || (deixaVazia && origemSemana !== w && porSemana(origemSemana) > cfg.porSemana)) {
+                mov.push(i); tamanho.set(i.turma, tamanho.get(i.turma) - 1);
+              }
+            }
+            if (mov.length >= Math.min(cfg.capMin, cfg.capMax) && (!melhor || mov.length > melhor.mov.length)) melhor = { d, nr, mov };
+          }
+        }
+        if (!melhor) break;
+        let t = turmaKey.get(melhor.nr + "|" + melhor.d);
+        if (!t) { t = { nr: melhor.nr, dia: melhor.d, membros: [] }; turmas.push(t); turmaKey.set(melhor.nr + "|" + melhor.d, t); }
+        for (const i of melhor.mov) { remove(i.turma, i); add(t, i); }
+      }
+    }
+  }
+
+  const finais = turmas.filter((t) => t.membros.length).sort((a, b) => a.dia - b.dia || a.nr.localeCompare(b.nr));
+  finais.forEach((t, k) => { t.codigo = "T" + pad(k + 1); t.membros.sort((a, b) => a.venc - b.venc || a.nome.localeCompare(b.nome)); });
+  itens.forEach((i) => { if (i.turma) i.motivo = ""; else if (!i.motivo && i.status !== "sem-data") i.motivo = "Não foi possível encaixar"; });
+  return { inicio, fim, itens, turmas: finais, semanas, feriados, cfg };
+}
+
+// ---------- exemplo ----------
+function exemplo() {
+  let seed = 7; const rnd = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
+  const pick = (a) => a[Math.floor(rnd() * a.length)];
+  const nomes = ["Ana", "Bruno", "Carla", "Diego", "Elaine", "Fábio", "Gisele", "Hugo", "Isadora", "João", "Karina", "Lucas", "Marina", "Nelson", "Olívia", "Paulo", "Queila", "Rafael", "Sílvia", "Tiago", "Úrsula", "Vítor", "Wesley", "Yara"];
+  const sobren = ["Almeida", "Barros", "Cardoso", "Duarte", "Esteves", "Farias", "Gomes", "Henriques", "Lacerda", "Moraes", "Nogueira", "Pacheco", "Queiroz", "Ribeiro", "Siqueira", "Teixeira"];
+  const setores = [["Manutenção Elétrica", "Eletricista", ["NR-10", "NR-35"]], ["Manutenção Mecânica", "Mecânico", ["NR-12", "NR-35"]], ["Utilidades", "Operador", ["NR-13", "NR-33"]], ["Tancagem", "Operador de Tanques", ["NR-20", "NR-33"]], ["Montagem", "Montador", ["NR-35", "NR-18"]]];
+  const escalas = ["14x14", "14x14", "14x14", "7x7", "7x7", "14x7", "10x5", "4x4", "4x4", "5x2"];
+  const hoje = todayDay(); const rows = [];
+  for (let i = 0; i < 120; i++) {
+    const [setor, funcao, nrs] = pick(setores); const escala = pick(escalas);
+    const base = hoje - Math.floor(rnd() * 28);
+    const nome = `${pick(nomes)} ${pick(sobren)} ${pick(sobren)}`;
+    const qtd = rnd() < 0.55 ? 2 : 1;
+    for (let k = 0; k < qtd; k++) {
+      const nr = nrs[k];
+      const venc = hoje - 20 + Math.floor(rnd() * 140);
+      const ultimo = addMonths(venc, -(VALIDADE_PADRAO[nr] || 24));
+      rows.push({ linha: rows.length + 2, matricula: String(10200 + i), nome, setor, funcao, nr, ultimo, vencimento: venc, escala, base });
+    }
+  }
+  return { rows, folgas: new Map(), feriados: [], avisos: [] };
+}
+
+// ---------- interface ----------
+const $ = (id) => document.getElementById(id);
+const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+let dados = exemplo(), fonteNome = null, resultado = null;
+
+function toast(msg) { const t = $("toast"); t.textContent = msg; t.hidden = false; clearTimeout(toast._h); toast._h = setTimeout(() => (t.hidden = true), 3500); }
+function lerCfg() {
+  const num = (id, def) => { const v = parseInt($(id).value, 10); return isFinite(v) ? v : def; };
+  return { inicio: parseDate($("inicio").value) ?? todayDay(), meses: Math.max(1, num("meses", 3)), antecedencia: Math.max(0, num("antecedencia", 90)), capMax: Math.max(1, num("capMax", 20)), capMin: Math.max(1, num("capMin", 3)), porSemana: Math.max(0, num("porSemana", 2)), feriadosNac: $("feriadosNac").checked };
+}
+function renderValidades() {
+  const nrs = new Set([...Object.keys(validades), ...dados.rows.map((r) => baseNR(r.nr))]);
+  $("validades").innerHTML = [...nrs].sort().map((nr) => `<div class="field"><label for="v-${esc(nr)}">${esc(nr)} (meses)</label><input type="number" min="1" max="120" id="v-${esc(nr)}" data-nr="${esc(nr)}" value="${validades[nr] ?? ""}"></div>`).join("");
+  $("validades").querySelectorAll("input").forEach((inp) => inp.addEventListener("change", () => { const v = parseInt(inp.value, 10); if (v > 0) validades[inp.dataset.nr] = v; else delete validades[inp.dataset.nr]; gerar(); }));
+}
+function situacao(i) {
+  if (i.status === "sem-data") return `<span class="pill neutral">sem data</span>`;
+  if (i.vencido) return `<span class="pill bad">vencido há ${-i.diasAte} d</span>`;
+  if (i.diasAte <= 30) return `<span class="pill warn">vence em ${i.diasAte} d</span>`;
+  return `<span class="pill neutral">vence em ${i.diasAte} d</span>`;
+}
+function gerar() {
+  const cfg = lerCfg();
+  resultado = planejar(dados, cfg);
+  const R = resultado;
+  const fonte = fonteNome ? `Fonte: <b>${esc(fonteNome)}</b> · ${dados.rows.length} linhas` : `<span class="tag-example">Dados de exemplo</span> Carregue sua planilha para ver os seus colaboradores.`;
+  $("fonte").innerHTML = `${fonte} · Período: <b>${fmt(R.inicio)}</b> a <b>${fmt(R.fim)}</b>`;
+  $("avisos").innerHTML = dados.avisos.map((a) => `<div class="msg">${esc(a)}</div>`).join("");
+
+  const pend = R.itens.filter((i) => !i.turma);
+  const vencidos = R.itens.filter((i) => i.vencido);
+  const pessoas = new Set(R.itens.map((i) => i.matricula)).size;
+  const semanasFracas = R.semanas.filter((w) => R.turmas.filter((t) => monday(t.dia) === w).length < cfg.porSemana).length;
+  $("stats").innerHTML = [
+    [pessoas, "colaboradores com treinamento a vencer", ""],
+    [R.itens.length, "treinamentos a reciclar", ""],
+    [vencidos.length, "já vencidos", vencidos.length ? "bad" : ""],
+    [R.turmas.length, "turmas montadas", ""],
+    [pend.length, "sem turma possível", pend.length ? "warn" : ""],
+    [semanasFracas, `semanas com menos de ${cfg.porSemana} turmas`, semanasFracas ? "warn" : ""],
+  ].map(([n, t, c]) => `<div class="stat ${c}"><div class="n">${n}</div><div class="t">${t}</div></div>`).join("");
+  $("cTurmas").textContent = `(${R.turmas.length})`; $("cVenc").textContent = `(${R.itens.length})`; $("cPend").textContent = `(${pend.length})`;
+
+  // turmas por semana
+  $("tab-turmas").innerHTML = R.semanas.map((w) => {
+    const ts = R.turmas.filter((t) => monday(t.dia) === w);
+    const pill = ts.length >= cfg.porSemana ? `<span class="pill ok">${ts.length} turma${ts.length === 1 ? "" : "s"}</span>` : `<span class="pill warn">${ts.length} de ${cfg.porSemana} turmas</span>`;
+    const fer = [...R.feriados.entries()].filter(([d]) => d >= w && d <= w + 4).map(([d, n]) => `${fmtShort(d)} ${esc(n)}`).join(", ");
+    const body = ts.length ? ts.map((t) => `
+      <details class="turma"><summary>
+        <span class="code">${t.codigo}</span>
+        <span class="date">${DOW[dow(t.dia)]} ${fmt(t.dia)}</span>
+        <span class="nr">${esc(t.nr)}</span>
+        <span>${t.membros.length < cfg.capMin ? `<span class="pill warn">${t.membros.length} pessoa${t.membros.length === 1 ? "" : "s"} · abaixo do mínimo</span>` : `<span class="pill neutral">${t.membros.length} de ${cfg.capMax} vagas</span>`}</span>
+      </summary><div class="members tablewrap"><table><thead><tr><th>Matrícula</th><th>Nome</th><th>Setor</th><th>Escala</th><th>Vencimento</th><th>Situação</th></tr></thead><tbody>
+        ${t.membros.map((i) => `<tr><td>${esc(i.matricula)}</td><td>${esc(i.nome)}</td><td>${esc(i.setor)}</td><td>${esc(i.escala)}</td><td class="dt">${fmt(i.venc)}</td><td>${situacao(i)}</td></tr>`).join("")}
+      </tbody></table></div></details>`).join("") : `<div class="empty-week">Nenhuma turma possível nesta semana.</div>`;
+    return `<article class="week"><div class="week-h"><h3>Semana de ${fmtShort(Math.max(w, R.inicio))} a ${fmtShort(Math.min(w + 4, R.fim))}${fer ? ` <span class="range">· feriado: ${fer}</span>` : ""}</h3>${pill}</div>${body}</article>`;
+  }).join("");
+
+  const nrs = [...new Set(R.itens.map((i) => i.nr))].sort();
+  const atual = $("filtroNR").value;
+  $("filtroNR").innerHTML = `<option value="">Todas</option>` + nrs.map((n) => `<option ${n === atual ? "selected" : ""}>${esc(n)}</option>`).join("");
+  renderVenc();
+
+  $("tblPend").innerHTML = pend.length ? `<thead><tr><th>Matrícula</th><th>Nome</th><th>Setor</th><th>NR</th><th>Vencimento</th><th>Escala</th><th>Motivo</th></tr></thead><tbody>` +
+    pend.sort((a, b) => (a.venc ?? 1e9) - (b.venc ?? 1e9)).map((i) => `<tr><td>${esc(i.matricula)}</td><td>${esc(i.nome)}</td><td>${esc(i.setor)}</td><td>${esc(i.nr)}</td><td class="dt">${fmt(i.venc)}</td><td>${esc(i.escala)}</td><td class="wrap">${esc(i.motivo)}</td></tr>`).join("") + `</tbody>`
+    : `<tbody><tr><td>Todos os treinamentos do período foram encaixados em turmas.</td></tr></tbody>`;
+}
+function renderVenc() {
+  if (!resultado) return;
+  const q = norm($("busca").value), nr = $("filtroNR").value;
+  const lista = resultado.itens.filter((i) => (!nr || i.nr === nr) && (!q || norm(`${i.nome} ${i.matricula} ${i.setor}`).includes(q)))
+    .sort((a, b) => (a.venc ?? 1e9) - (b.venc ?? 1e9) || a.nome.localeCompare(b.nome));
+  let mesAtual = null, html = "";
+  for (const i of lista) {
+    const mes = i.venc == null ? "Sem data de vencimento" : i.vencido ? "Já vencidos" : (() => { const [y, m] = ymd(i.venc); return `${MESES[m - 1]} de ${y}`; })();
+    if (mes !== mesAtual) { mesAtual = mes; html += `<tr class="month"><td colspan="9">${esc(mes.charAt(0).toUpperCase() + mes.slice(1))}</td></tr>`; }
+    html += `<tr><td>${esc(i.matricula)}</td><td>${esc(i.nome)}</td><td>${esc(i.setor)}</td><td>${esc(i.nr)}</td><td class="dt">${fmt(i.venc)}</td><td>${situacao(i)}</td><td>${esc(i.escala)}</td><td class="dt">${i.turma ? `${i.turma.codigo} · ${DOW[dow(i.turma.dia)]} ${fmt(i.turma.dia)}` : `<span class="pill warn">sem turma</span>`}</td></tr>`;
+  }
+  $("tblVenc").innerHTML = `<thead><tr><th>Matrícula</th><th>Nome</th><th>Setor</th><th>NR</th><th>Vencimento</th><th>Situação</th><th>Escala</th><th>Turma</th></tr></thead><tbody>${html || `<tr><td colspan="8">Nenhum treinamento encontrado.</td></tr>`}</tbody>`;
+}
+
+// ---------- arquivos ----------
+async function salvar(wb, filename) {
+  const buf = XLSX.write(wb, { bookType: "xlsx", type: "array" });
+  if (window.claude && typeof window.claude.use === "function") {
+    const dl = await window.claude.use("downloads");
+    if (dl) {
+      try { await dl.save({ filename, data: new Blob([buf]) }); toast("Arquivo salvo"); }
+      catch (e) { if (e && e.code !== "declined") toast("Não foi possível salvar o arquivo aqui."); }
+      return;
+    }
+  }
+  XLSX.writeFile(wb, filename);
+}
+function exportar() {
+  if (!resultado) return;
+  const R = resultado, wb = XLSX.utils.book_new();
+  const turmasRows = [];
+  R.turmas.forEach((t) => t.membros.forEach((i) => turmasRows.push({ Turma: t.codigo, Data: fmt(t.dia), "Dia da semana": DOW[dow(t.dia)], NR: t.nr, Matrícula: i.matricula, Nome: i.nome, Setor: i.setor, Função: i.funcao, Escala: i.escala, Vencimento: fmt(i.venc) })));
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(turmasRows.length ? turmasRows : [{ Turma: "Nenhuma turma" }]), "Turmas");
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(R.turmas.map((t) => ({ Turma: t.codigo, Data: fmt(t.dia), "Dia da semana": DOW[dow(t.dia)], NR: t.nr, Participantes: t.membros.length }))), "Resumo das turmas");
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(R.semanas.map((w) => { const n = R.turmas.filter((t) => monday(t.dia) === w).length; return { Semana: `${fmt(Math.max(w, R.inicio))} a ${fmt(Math.min(w + 4, R.fim))}`, Turmas: n, "Atende mínimo": n >= R.cfg.porSemana ? "Sim" : "Não" }; })), "Semanas");
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet([...R.itens].sort((a, b) => (a.venc ?? 1e9) - (b.venc ?? 1e9)).map((i) => ({ Matrícula: i.matricula, Nome: i.nome, Setor: i.setor, NR: i.nr, Vencimento: fmt(i.venc), Situação: i.status === "sem-data" ? "Sem data" : i.vencido ? "Vencido" : `Vence em ${i.diasAte} dias`, Escala: i.escala, Turma: i.turma ? i.turma.codigo : "", "Data da turma": i.turma ? fmt(i.turma.dia) : "", Motivo: i.turma ? "" : i.motivo }))), "A vencer");
+  const pend = R.itens.filter((i) => !i.turma);
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(pend.length ? pend.map((i) => ({ Matrícula: i.matricula, Nome: i.nome, NR: i.nr, Vencimento: fmt(i.venc), Escala: i.escala, Motivo: i.motivo })) : [{ Matrícula: "Nenhuma pendência" }]), "Sem turma");
+  salvar(wb, `turmas-nr-${fmt(R.inicio).replace(/\//g, "-")}.xlsx`);
+}
+function modelo() {
+  const wb = XLSX.utils.book_new();
+  const ws = XLSX.utils.aoa_to_sheet([
+    ["Matrícula", "Nome", "Setor", "Função", "NR", "Data Último Treinamento", "Vencimento", "Escala", "Início da Escala"],
+    ["10001", "Maria Exemplo", "Manutenção", "Eletricista", "NR-10", "15/01/2025", "15/01/2027", "14x14", "02/11/2026"],
+    ["10001", "Maria Exemplo", "Manutenção", "Eletricista", "NR-35", "20/12/2024", "", "14x14", "02/11/2026"],
+    ["10002", "José Exemplo", "Operação", "Operador", "NR-33", "10/02/2026", "", "7x7", "05/11/2026"],
+  ]);
+  ws["!cols"] = [10, 26, 18, 16, 8, 22, 12, 9, 16].map((w) => ({ wch: w }));
+  XLSX.utils.book_append_sheet(wb, ws, "Colaboradores");
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([["Matrícula", "Data"], ["10003", "18/11/2026"], ["10003", "19/11/2026"], ["10003", "20/11/2026"]]), "Folgas");
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([["Data", "Descrição"], ["25/01/2027", "Aniversário da cidade"]]), "Feriados");
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([
+    ["Como preencher"],
+    ["Uma linha por colaborador e por NR."],
+    ["Vencimento é opcional: se ficar vazio, é calculado pela Data Último Treinamento + validade da NR configurada no programa."],
+    ["Escala: dias trabalhados x dias de folga (ex.: 14x14, 7x7, 14x7)."],
+    ["Início da Escala: qualquer data que tenha sido o 1º dia de trabalho de um ciclo."],
+    ["Aba Folgas (opcional): use quando a escala for irregular. Liste cada dia de folga do colaborador; ela substitui a escala dele."],
+    ["Aba Feriados (opcional): feriados municipais/estaduais. Os nacionais já são considerados."],
+    ["Apague as linhas de exemplo antes de usar."],
+  ]), "Instruções");
+  salvar(wb, "modelo-treinamentos-nr.xlsx");
+}
+$("arquivo").addEventListener("change", async (ev) => {
+  const f = ev.target.files[0]; if (!f) return;
+  try {
+    if (typeof XLSX === "undefined") throw new Error("A biblioteca de planilhas não carregou. Verifique a conexão com a internet e recarregue a página.");
+    const buf = await f.arrayBuffer();
+    const csv = /\.csv$/i.test(f.name);
+    const wb = XLSX.read(buf, { type: "array", raw: csv, codepage: 65001 });
+    const d = parseWorkbook(wb);
+    if (!d.rows.length) { $("avisos").innerHTML = `<div class="msg">${esc(d.avisos[0] || "Nenhuma linha válida encontrada na planilha.")}</div>`; return; }
+    dados = d; fonteNome = f.name; renderValidades(); gerar(); toast(`${d.rows.length} linhas carregadas`);
+  } catch (e) { $("avisos").innerHTML = `<div class="msg">${esc(e.message || "Não consegui ler o arquivo.")}</div>`; }
+  ev.target.value = "";
+});
+$("btnGerar").addEventListener("click", gerar);
+["inicio", "meses", "antecedencia", "capMax", "capMin", "porSemana", "feriadosNac"].forEach((id) => $(id).addEventListener("change", gerar));
+$("btnExportar").addEventListener("click", () => { if (typeof XLSX === "undefined") return toast("A biblioteca de planilhas não carregou."); exportar(); });
+$("btnModelo").addEventListener("click", () => { if (typeof XLSX === "undefined") return toast("A biblioteca de planilhas não carregou."); modelo(); });
+$("busca").addEventListener("input", renderVenc);
+$("filtroNR").addEventListener("change", renderVenc);
+document.querySelectorAll(".tabs button").forEach((b) => b.addEventListener("click", () => {
+  document.querySelectorAll(".tabs button").forEach((x) => x.setAttribute("aria-selected", String(x === b)));
+  ["turmas", "vencimentos", "pendencias", "regras"].forEach((t) => ($("tab-" + t).hidden = t !== b.dataset.tab));
+}));
+{ const [y, m, d] = ymd(todayDay()); $("inicio").value = `${y}-${pad(m)}-${pad(d)}`; }
+renderValidades();
+gerar();
+</script>
+</body>
+</html>
