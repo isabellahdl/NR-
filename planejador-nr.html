@@ -78,6 +78,13 @@ button:hover, .filebtn:hover { filter: brightness(1.06); }
 .source { font-size: .9rem; color: var(--muted); }
 .source b { color: var(--ink); }
 .tag-example { display: inline-block; font-size: .72rem; font-weight: 700; text-transform: uppercase; letter-spacing: .05em; background: var(--warn-bg); color: var(--warn); padding: 2px 8px; border-radius: 999px; }
+.files { display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 12px; }
+.slot { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px; display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+.slot-h { display: flex; align-items: center; gap: 10px; }
+.slot-n { font-family: var(--font-display); font-weight: 800; width: 1.7rem; height: 1.7rem; border-radius: 50%; display: grid; place-items: center; background: var(--signal); color: #1d2422; flex: none; }
+.slot-d { margin: 0; color: var(--muted); font-size: .9rem; }
+.slot-st { margin: 0; font-size: .88rem; overflow-wrap: anywhere; }
+.slot .actions { margin-top: auto; }
 .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 12px; }
 .stat { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 12px 14px; }
 .stat .n { font-family: var(--font-display); font-size: 2rem; font-weight: 800; font-variant-numeric: tabular-nums; line-height: 1.1; }
@@ -140,18 +147,38 @@ details.cfg summary { cursor: pointer; font-weight: 600; }
       <h1>Planejador de Turmas NR</h1>
       <p>Mostra quem precisa reciclar treinamentos de NR nos próximos meses e monta as turmas em dias úteis que caem no meio da folga de cada colaborador.</p>
     </div>
-    <div class="actions">
-      <label class="filebtn" for="arquivo">Carregar treinamentos
-        <input type="file" id="arquivo" accept=".xlsx,.xls,.csv">
-      </label>
-      <label class="filebtn" for="arqEscala">Carregar escala
-        <input type="file" id="arqEscala" accept=".xlsx,.xls,.csv">
-      </label>
-      <button type="button" id="btnModelo">Modelo de treinamentos</button>
-      <button type="button" id="btnModeloEscala">Modelo de escala</button>
-    </div>
   </header>
   <div class="stripe" aria-hidden="true"></div>
+
+  <section class="files" aria-label="Planilhas">
+    <div class="slot">
+      <div class="slot-h"><span class="slot-n">1</span><h3>Escala de revezamento</h3></div>
+      <p class="slot-d">Dias de folga de cada turma (colunas F).</p>
+      <p class="slot-st" id="stEscala"><span class="pill neutral">não carregada</span></p>
+      <div class="actions">
+        <label class="filebtn" for="arqEscala">Carregar<input type="file" id="arqEscala" accept=".xlsx,.xls,.csv"></label>
+        <button type="button" id="btnModeloEscala">Modelo</button>
+      </div>
+    </div>
+    <div class="slot">
+      <div class="slot-h"><span class="slot-n">2</span><h3>Colaboradores e turmas</h3></div>
+      <p class="slot-d">Matrícula, nome e turma (A, B, C…) de cada colaborador.</p>
+      <p class="slot-st" id="stCadastro"><span class="pill neutral">não carregada</span></p>
+      <div class="actions">
+        <label class="filebtn" for="arqCadastro">Carregar<input type="file" id="arqCadastro" accept=".xlsx,.xls,.csv"></label>
+        <button type="button" id="btnModeloCadastro">Modelo</button>
+      </div>
+    </div>
+    <div class="slot">
+      <div class="slot-h"><span class="slot-n">3</span><h3>Treinamentos vencidos e a vencer</h3></div>
+      <p class="slot-d">Matrícula, NR e vencimento (ou data do último treinamento).</p>
+      <p class="slot-st" id="stTrein"><span class="pill warn">dados de exemplo</span></p>
+      <div class="actions">
+        <label class="filebtn" for="arquivo">Carregar<input type="file" id="arquivo" accept=".xlsx,.xls,.csv"></label>
+        <button type="button" id="btnModelo">Modelo</button>
+      </div>
+    </div>
+  </section>
 
   <section class="panel" aria-label="Configurações">
     <div class="controls">
@@ -162,7 +189,8 @@ details.cfg summary { cursor: pointer; font-weight: 600; }
       <div class="field"><label for="capMin">Mínimo por turma</label><input type="number" id="capMin" min="1" max="200" value="3"></div>
       <div class="field"><label for="escalaPadrao">Escala padrão</label><input type="text" id="escalaPadrao" value="6x4" style="font:inherit;color:var(--ink);background:var(--bg);border:1px solid var(--line);border-radius:6px;padding:7px 9px;width:100%"></div>
       <div class="field"><label for="porSemana">Turmas por semana (mín.)</label><input type="number" id="porSemana" min="0" max="10" value="2"></div>
-      <label class="check"><input type="checkbox" id="feriadosNac" checked> Pular feriados nacionais</label>
+      <label class="check"><input type="checkbox" id="projetar" checked> Continuar a escala depois do fim da planilha</label>
+      <label class="check"><input type="checkbox" id="feriadosNac"> Pular feriados nacionais</label>
       <button type="button" class="primary" id="btnGerar">Montar turmas</button>
     </div>
     <details class="cfg" style="margin-top:14px">
@@ -202,7 +230,7 @@ details.cfg summary { cursor: pointer; font-weight: 600; }
       <h2>Regras usadas para montar as turmas</h2>
       <ul>
         <li>Entra na lista quem tem treinamento vencido ou vencendo até o fim do período planejado.</li>
-        <li>Treinamento só de segunda a sexta, sem feriados (nacionais e os da aba <b>Feriados</b>).</li>
+        <li>Treinamento só de segunda a sexta. Feriados só são pulados se a opção <b>Pular feriados nacionais</b> estiver marcada.</li>
         <li>O treinamento cai numa folga do colaborador, nunca no primeiro nem no último dia daquele bloco de folga. Por isso escalas com folgas de 1 ou 2 dias (ex.: 5x2, 6x1) não têm data possível.</li>
         <li>A data fica entre o início da janela de antecedência e o dia anterior ao vencimento. Quem já está vencido pode ser chamado em qualquer data do período, com prioridade.</li>
         <li>Quem vence primeiro é encaixado primeiro. Cada turma escolhe o dia que reúne mais colaboradores da mesma NR, até o limite de vagas.</li>
@@ -212,7 +240,14 @@ details.cfg summary { cursor: pointer; font-weight: 600; }
       </ul>
     </div>
     <div class="panel">
-      <h2>Como montar a planilha</h2>
+      <h2>As três planilhas</h2>
+      <ul>
+        <li><b>1. Escala de revezamento</b>: a escala do ano como já é usada (colunas F com as turmas de folga). Quando a escala acaba, o programa continua o ciclo 6x4 (opção <b>Continuar a escala depois do fim da planilha</b>) e marca essas turmas com "pela projeção da escala".</li>
+        <li><b>2. Colaboradores e turmas</b>: Matrícula, Nome e Turma (A, B, C, D, E ou "Turma A"). Setor e Função são opcionais.</li>
+        <li><b>3. Treinamentos vencidos e a vencer</b>: Matrícula, NR e Vencimento (ou Data do Último Treinamento). O nome é opcional.</li>
+      </ul>
+      <p>O programa liga as três pela matrícula (ou pelo nome, se faltar a matrícula). Quando a escala do ano seguinte sair, troque só o arquivo 1.</p>
+      <h2>Detalhes da planilha de treinamentos</h2>
       <p>Uma linha por colaborador e por NR. Clique em <b>Baixar modelo</b> para ter o arquivo pronto. Colunas reconhecidas (maiúsculas e acentos não importam):</p>
       <ul>
         <li><b>Matrícula</b>, <b>Nome</b>, <b>Setor</b>, <b>Função</b></li>
@@ -335,6 +370,27 @@ function mapHeaders(headers) {
     if (hit) map[field] = hit[0];
   }
   return map;
+}
+
+function parseCadastro(wb) {
+  const out = { porMat: new Map(), porNome: new Map(), turmas: new Set(), avisos: [] };
+  for (const name of wb.SheetNames) {
+    const aoa = XLSX.utils.sheet_to_json(wb.Sheets[name], { header: 1, defval: "", raw: true });
+    let hi = -1, map = null;
+    for (let k = 0; k < Math.min(15, aoa.length); k++) { const m = mapHeaders(aoa[k].map((c) => String(c ?? ""))); if (m.grupo && (m.matricula || m.nome)) { hi = k; map = m; break; } }
+    if (hi < 0) continue;
+    const head = aoa[hi].map((c) => String(c ?? "")), col = (f) => (map[f] != null ? head.indexOf(map[f]) : -1);
+    const cM = col("matricula"), cN = col("nome"), cT = col("grupo"), cS = col("setor"), cF = col("funcao");
+    for (const r of aoa.slice(hi + 1)) {
+      const turma = String(r[cT] ?? "").trim(); if (!turma) continue;
+      const e = { turma, nome: cN >= 0 ? String(r[cN]).trim() : "", setor: cS >= 0 ? String(r[cS]).trim() : "", funcao: cF >= 0 ? String(r[cF]).trim() : "" };
+      if (cM >= 0 && String(r[cM]).trim()) out.porMat.set(keyMat(r[cM]), e);
+      if (e.nome) out.porNome.set(norm(e.nome), e);
+      out.turmas.add(keyGrupo(turma).toUpperCase());
+    }
+  }
+  if (!out.porMat.size && !out.porNome.size) out.avisos.push("Não reconheci a planilha de colaboradores. Ela precisa das colunas Matrícula (ou Nome) e Turma. Veja o Modelo.");
+  return out;
 }
 
 function parseWorkbook(wb) {
@@ -517,14 +573,6 @@ function lerRevezamento(aoa, name, out) {
     });
     inicioSecao = dr + 1;
   }
-  // lista de feriados na própria escala (célula "Feriados" e datas ao lado/abaixo)
-  aoa.forEach((r, ri) => r.forEach((c, ci) => {
-    if (norm(c) !== "feriados" && norm(c) !== "feriado") return;
-    for (let k = ri; k < Math.min(aoa.length, ri + 60); k++) for (const cc of [ci, ci + 1]) {
-      const v = aoa[k][cc]; const d = typeof v === "number" && v > 30000 && v < 80000 ? Math.floor(v) - 25569 : /^\d{1,2}\/\d{1,2}\/\d{2,4}$/.test(String(v).trim()) ? parseDate(v) : null;
-      if (d != null) out.feriados.push([d, "Feriado (escala)"]);
-    }
-  }));
   for (const k of turmasLidas) out.porGrupo.get(k).dias.push(...diasLidos); // período coberto pela escala
   if (achou) out.formatos.add("escala de revezamento por turma");
   return achou;
@@ -544,9 +592,30 @@ function mesAno(txt) {
   return [y, m];
 }
 
+// ---------- projeção: repete o ciclo (ex.: 6x4 = 10 dias) depois do último dia da escala ----------
+function cicloPadrao() {
+  const m = String(($("escalaPadrao") && $("escalaPadrao").value) || "6x4").match(/(\d+)\s*[x×X\/]\s*(\d+)/);
+  return m ? +m[1] + +m[2] : null;
+}
+function cicloProjecao(e) {
+  if (!$("projetar") || !$("projetar").checked || !e.folgas || !e.folgas.size) return null;
+  const p = cicloPadrao(); if (!p || e.max - e.min < p * 3) return null;
+  if (e._p !== p) { // confere se os últimos dias da escala seguem mesmo o ciclo
+    let ok = true;
+    for (let d = Math.max(e.min + p, e.max - 59); d <= e.max; d++) if (e.folgas.has(d) !== e.folgas.has(d - p)) { ok = false; break; }
+    e._p = p; e._ok = ok;
+  }
+  return e._ok ? p : null;
+}
+
 // ---------- folgas ----------
 function folgaFn(row, folgasExplicitas, esc = escalaDados) {
-  const deSet = (e, origem) => ({ off: (d) => e.folgas.has(d), cobre: [e.min, e.max], rotulo: origem });
+  const deSet = (e, origem) => {
+    const p = cicloProjecao(e);
+    if (!p) return { off: (d) => e.folgas.has(d), cobre: [e.min, e.max], rotulo: origem };
+    const off = (d) => d > e.max ? e.folgas.has(d - p * Math.ceil((d - e.max) / p)) : d < e.min ? e.folgas.has(d + p * Math.ceil((e.min - d) / p)) : e.folgas.has(d);
+    return { off, rotulo: origem, projApos: e.max };
+  };
   const deCiclo = (e, origem) => folgaCiclo({ escala: e.escala, base: e.base, iniFolga: e.iniFolga }, origem);
   if (esc) {
     const em = esc.porMat.get(keyMat(row.matricula));
@@ -563,7 +632,7 @@ function folgaFn(row, folgasExplicitas, esc = escalaDados) {
   if (exp && exp.size) return { off: (d) => exp.has(d), cobre: [Math.min(...exp), Math.max(...exp)], rotulo: "aba Folgas" };
   const r = folgaCiclo(row, "");
   if (r.erro && esc) r.erro = esc.porGrupo.size && !esc.porMat.size
-    ? "Não sei a turma deste colaborador: inclua a coluna Turma na planilha de treinamentos (ou uma aba Matrícula + Turma na planilha de escala)"
+    ? (cadastro ? "Colaborador não encontrado na planilha de colaboradores e turmas (confira a matrícula)" : "Não sei a turma deste colaborador: carregue a planilha de colaboradores e turmas")
     : "Colaborador não encontrado na planilha de escala (nem pela matrícula, nem pela turma, nem pelo nome)";
   return r;
 }
@@ -585,14 +654,15 @@ function planejar(dados, cfg) {
   const feriados = new Map();
   if (cfg.feriadosNac) { const [y0] = ymd(inicio), [y1] = ymd(fim); for (let y = y0; y <= y1; y++) nationalHolidays(y).forEach(([d, n]) => feriados.set(d, n)); }
   dados.feriados.forEach(([d, n]) => feriados.set(d, n));
-  if (escalaDados) escalaDados.feriados.forEach(([d, n]) => { if (!feriados.has(d)) feriados.set(d, n); });
   const util = (d) => { const w = dow(d); return w >= 1 && w <= 5 && !feriados.has(d); };
 
   const itens = [];
-  for (const r of dados.rows) {
+  for (const r0 of dados.rows) {
+    const cad = cadastro ? (cadastro.porMat.get(keyMat(r0.matricula)) || (r0.nome ? cadastro.porNome.get(norm(r0.nome)) : null)) : null;
+    const r = cad ? { ...r0, grupo: r0.grupo || cad.turma, nome: r0.nome || cad.nome, setor: r0.setor || cad.setor, funcao: r0.funcao || cad.funcao } : r0;
     let venc = r.vencimento;
     if (venc == null && r.ultimo != null) { const meses = validades[baseNR(r.nr)]; if (meses) venc = addMonths(r.ultimo, meses); }
-    const item = { ...r, venc, status: "", turma: null, motivo: "", cands: [] };
+    const item = { ...r, venc, status: "", turma: null, motivo: "", cands: [], semCadastro: !!cadastro && !cad };
     if (venc == null) { item.status = "sem-data"; item.motivo = r.ultimo != null ? `Sem validade configurada para ${baseNR(r.nr)}` : "Sem data de vencimento nem do último treinamento"; itens.push(item); continue; }
     if (venc > fim) continue; // fora do período
     item.vencido = venc <= inicio;
@@ -603,6 +673,7 @@ function planejar(dados, cfg) {
     item.janela = [janIni, janFim];
     const ff = folgaFn(r, dados.folgas);
     if (ff.rotulo) item.escala = ff.rotulo;
+    item.projApos = ff.projApos ?? null;
     if (ff.erro) { item.motivo = ff.erro; itens.push(item); continue; }
     for (let d = janIni; d <= janFim; d++) if (util(d) && ff.off(d) && ff.off(d - 1) && ff.off(d + 1)) item.cands.push(d);
     if (!item.cands.length) {
@@ -714,7 +785,7 @@ function planejar(dados, cfg) {
   }
 
   const finais = turmas.filter((t) => t.membros.length).sort((a, b) => a.dia - b.dia || a.nr.localeCompare(b.nr));
-  finais.forEach((t, k) => { t.codigo = "T" + pad(k + 1); t.membros.sort((a, b) => a.venc - b.venc || a.nome.localeCompare(b.nome)); });
+  finais.forEach((t, k) => { t.projetada = t.membros.some((i) => i.projApos != null && t.dia > i.projApos); t.codigo = "T" + pad(k + 1); t.membros.sort((a, b) => a.venc - b.venc || a.nome.localeCompare(b.nome)); });
   itens.forEach((i) => { if (i.turma) i.motivo = ""; else if (!i.motivo && i.status !== "sem-data") i.motivo = "Não foi possível encaixar"; });
   return { inicio, fim, itens, turmas: finais, semanas, feriados, cfg };
 }
@@ -747,7 +818,7 @@ function exemplo() {
 // ---------- interface ----------
 const $ = (id) => document.getElementById(id);
 const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
-let dados = exemplo(), fonteNome = null, resultado = null, escalaDados = null, escalaNome = null;
+let dados = exemplo(), fonteNome = null, resultado = null, escalaDados = null, escalaNome = null, cadastro = null, cadastroNome = null;
 
 function toast(msg) { const t = $("toast"); t.textContent = msg; t.hidden = false; clearTimeout(toast._h); toast._h = setTimeout(() => (t.hidden = true), 3500); }
 function lerCfg() {
@@ -769,18 +840,33 @@ function gerar() {
   const cfg = lerCfg();
   resultado = planejar(dados, cfg);
   const R = resultado;
-  const fonte = fonteNome ? `Fonte: <b>${esc(fonteNome)}</b> · ${dados.rows.length} linhas` : `<span class="tag-example">Dados de exemplo</span> Carregue sua planilha para ver os seus colaboradores.`;
   const E = escalaDados;
-  const partes = E ? [E.porGrupo.size && `${E.porGrupo.size} turmas (${[...E.porGrupo.keys()].map((k) => k.toUpperCase()).sort().join(", ")})`, E.membros.size && `${E.membros.size} colaboradores ligados a turmas`, E.porMat.size && `${E.porMat.size} colaboradores`, E.porNome.size && `${E.porNome.size} por nome`].filter(Boolean) : [];
-  const fonteEsc = E ? ` · Escala: <b>${esc(escalaNome)}</b> (${esc(partes.join(", "))})` : fonteNome ? " · Escala: colunas da planilha de treinamentos" : "";
-  $("fonte").innerHTML = `${fonte}${fonteEsc} · Período: <b>${fmt(R.inicio)}</b> a <b>${fmt(R.fim)}</b>`;
-  const avisos = [...dados.avisos, ...(escalaDados ? escalaDados.avisos : [])];
-  if (dados.semEscala && !escalaDados) avisos.push("Não há escala para estes colaboradores. Carregue a planilha de escala (botão Carregar escala) ou inclua as colunas Escala e Início da Escala.");
+  const ok = (t) => `<span class="pill ok">carregada</span> `;
+  if (E) {
+    const g = [...E.porGrupo.values()].filter((e) => e.folgas && e.folgas.size);
+    const ate = g.length ? Math.max(...g.map((e) => e.max)) : null, de = g.length ? Math.min(...g.map((e) => e.min)) : null;
+    const partes = [E.porGrupo.size && `turmas ${[...E.porGrupo.keys()].map((k) => k.toUpperCase()).sort().join(", ")}`, E.porMat.size && `${E.porMat.size} colaboradores`, E.porNome.size && `${E.porNome.size} por nome`].filter(Boolean);
+    const proj = g.length && g.every((e) => cicloProjecao(e)) ? ` · depois de ${fmt(ate)} segue o ciclo ${esc($("escalaPadrao").value)}` : "";
+    $("stEscala").innerHTML = `${ok()}<b>${esc(escalaNome)}</b><br>${esc(partes.join(" · "))}${ate ? ` · de ${fmt(de)} a ${fmt(ate)}` : ""}${proj}`;
+  }
+  if (cadastro) $("stCadastro").innerHTML = `${ok()}<b>${esc(cadastroNome)}</b><br>${cadastro.porMat.size || cadastro.porNome.size} colaboradores · turmas ${esc([...cadastro.turmas].sort().join(", "))}`;
+  $("stTrein").innerHTML = fonteNome ? `${ok()}<b>${esc(fonteNome)}</b><br>${dados.rows.length} linhas` : `<span class="pill warn">dados de exemplo</span> Carregue a sua planilha para ver os seus colaboradores.`;
+  $("fonte").innerHTML = `Período planejado: <b>${fmt(R.inicio)}</b> a <b>${fmt(R.fim)}</b>`;
+  const avisos = [...dados.avisos, ...(escalaDados ? escalaDados.avisos : []), ...(cadastro ? cadastro.avisos : [])];
+  if (cadastro && fonteNome) {
+    const fora = [...new Set(R.itens.filter((i) => i.semCadastro && !i.grupo).map((i) => i.matricula))];
+    if (fora.length) avisos.push(`${fora.length} colaborador(es) da planilha de treinamentos não estão na planilha de colaboradores e turmas: ${fora.slice(0, 12).join(", ")}${fora.length > 12 ? "…" : ""}. Confira as matrículas.`);
+  }
+  if (escalaDados && $("projetar").checked) {
+    const g = [...escalaDados.porGrupo.entries()].filter(([, e]) => e.folgas && e.folgas.size && !cicloProjecao(e)).map(([k]) => k.toUpperCase());
+    if (g.length) avisos.push(`Não foi possível continuar a escala da(s) turma(s) ${g.join(", ")} depois do fim da planilha, porque os últimos dias não seguem o ciclo ${$("escalaPadrao").value}. Confira a Escala padrão.`);
+  }
+  if (dados.semEscala && !escalaDados && fonteNome) avisos.push("Carregue a escala de revezamento (campo 1) para o programa saber as folgas.");
   if (escalaDados) {
     const semEsc = new Set(R.itens.filter((i) => /não encontrado na planilha de escala/.test(i.motivo)).map((i) => i.matricula));
     if (semEsc.size) avisos.push(`${semEsc.size} colaborador(es) não foram encontrados na planilha de escala: ${[...semEsc].slice(0, 12).join(", ")}${semEsc.size > 12 ? "…" : ""}. Confira as matrículas.`);
     const semTurma = new Set(R.itens.filter((i) => /Não sei a turma/.test(i.motivo)).map((i) => i.matricula));
-    if (semTurma.size) avisos.push(`${semTurma.size} colaborador(es) sem turma informada (${[...semTurma].slice(0, 12).join(", ")}${semTurma.size > 12 ? "…" : ""}). A escala é por turma, então inclua a coluna Turma na planilha de treinamentos ou uma aba com Matrícula e Turma na planilha de escala.`);
+    if (semTurma.size && !cadastro) avisos.push(`A escala é por turma: carregue a planilha de colaboradores e turmas (campo 2) para ligar cada colaborador à turma dele.`);
     const turmaFora = [...new Set(R.itens.map((i) => (i.motivo.match(/^A turma (.+) não aparece na escala/) || [])[1]).filter(Boolean))];
     if (turmaFora.length) avisos.push(`Turma(s) ${turmaFora.join(", ")} não aparecem na escala de folgas. Confira se o nome da turma é o mesmo nas duas planilhas.`);
   }
@@ -810,7 +896,7 @@ function gerar() {
         <span class="code">${t.codigo}</span>
         <span class="date">${DOW[dow(t.dia)]} ${fmt(t.dia)}</span>
         <span class="nr">${esc(t.nr)}</span>
-        <span>${t.membros.length < cfg.capMin ? `<span class="pill warn">${t.membros.length} pessoa${t.membros.length === 1 ? "" : "s"} · abaixo do mínimo</span>` : `<span class="pill neutral">${t.membros.length} de ${cfg.capMax} vagas</span>`}</span>
+        <span>${t.projetada ? `<span class="pill neutral" title="A escala carregada termina antes desta data; o dia foi calculado repetindo o ciclo">pela projeção da escala</span> ` : ""}${t.membros.length < cfg.capMin ? `<span class="pill warn">${t.membros.length} pessoa${t.membros.length === 1 ? "" : "s"} · abaixo do mínimo</span>` : `<span class="pill neutral">${t.membros.length} de ${cfg.capMax} vagas</span>`}</span>
       </summary><div class="members tablewrap"><table><thead><tr><th>Matrícula</th><th>Nome</th><th>Setor</th><th>Escala</th><th>Vencimento</th><th>Situação</th></tr></thead><tbody>
         ${t.membros.map((i) => `<tr><td>${esc(i.matricula)}</td><td>${esc(i.nome)}</td><td>${esc(i.setor)}</td><td>${esc(i.escala)}</td><td class="dt">${fmt(i.venc)}</td><td>${situacao(i)}</td></tr>`).join("")}
       </tbody></table></div></details>`).join("") : `<div class="empty-week">Nenhuma turma possível nesta semana.</div>`;
@@ -859,7 +945,7 @@ function exportar() {
   const turmasRows = [];
   R.turmas.forEach((t) => t.membros.forEach((i) => turmasRows.push({ Turma: t.codigo, Data: fmt(t.dia), "Dia da semana": DOW[dow(t.dia)], NR: t.nr, Matrícula: i.matricula, Nome: i.nome, Setor: i.setor, Função: i.funcao, Escala: i.escala, Vencimento: fmt(i.venc) })));
   XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(turmasRows.length ? turmasRows : [{ Turma: "Nenhuma turma" }]), "Turmas");
-  XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(R.turmas.map((t) => ({ Turma: t.codigo, Data: fmt(t.dia), "Dia da semana": DOW[dow(t.dia)], NR: t.nr, Participantes: t.membros.length }))), "Resumo das turmas");
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(R.turmas.map((t) => ({ Turma: t.codigo, Data: fmt(t.dia), "Dia da semana": DOW[dow(t.dia)], NR: t.nr, Participantes: t.membros.length, Observação: t.projetada ? "Data calculada pela projeção da escala (depois do fim da planilha)" : "" }))), "Resumo das turmas");
   XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(R.semanas.map((w) => { const n = R.turmas.filter((t) => monday(t.dia) === w).length; return { Semana: `${fmt(Math.max(w, R.inicio))} a ${fmt(Math.min(w + 4, R.fim))}`, Turmas: n, "Atende mínimo": n >= R.cfg.porSemana ? "Sim" : "Não" }; })), "Semanas");
   XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet([...R.itens].sort((a, b) => (a.venc ?? 1e9) - (b.venc ?? 1e9)).map((i) => ({ Matrícula: i.matricula, Nome: i.nome, Setor: i.setor, NR: i.nr, Vencimento: fmt(i.venc), Situação: i.status === "sem-data" ? "Sem data" : i.vencido ? "Vencido" : `Vence em ${i.diasAte} dias`, Escala: i.escala, Turma: i.turma ? i.turma.codigo : "", "Data da turma": i.turma ? fmt(i.turma.dia) : "", Motivo: i.turma ? "" : i.motivo }))), "A vencer");
   const pend = R.itens.filter((i) => !i.turma);
@@ -869,12 +955,12 @@ function exportar() {
 function modelo() {
   const wb = XLSX.utils.book_new();
   const ws = XLSX.utils.aoa_to_sheet([
-    ["Matrícula", "Nome", "Setor", "Função", "Turma", "NR", "Data Último Treinamento", "Vencimento"],
-    ["10001", "Maria Exemplo", "Manutenção", "Eletricista", "A", "NR-10", "15/01/2025", "15/01/2027"],
-    ["10001", "Maria Exemplo", "Manutenção", "Eletricista", "A", "NR-35", "20/12/2024", ""],
-    ["10002", "José Exemplo", "Operação", "Operador", "D", "NR-33", "10/02/2026", ""],
+    ["Matrícula", "Nome", "NR", "Data Último Treinamento", "Vencimento"],
+    ["10001", "Maria Exemplo", "NR-10", "15/01/2025", "15/01/2027"],
+    ["10001", "Maria Exemplo", "NR-35", "20/12/2024", ""],
+    ["10002", "José Exemplo", "NR-33", "10/02/2026", ""],
   ]);
-  ws["!cols"] = [10, 26, 18, 16, 7, 8, 22, 12].map((w) => ({ wch: w }));
+  ws["!cols"] = [10, 26, 8, 22, 12].map((w) => ({ wch: w }));
   XLSX.utils.book_append_sheet(wb, ws, "Colaboradores");
   XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([["Matrícula", "Data"], ["10003", "18/11/2026"], ["10003", "19/11/2026"], ["10003", "20/11/2026"]]), "Folgas");
   XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([["Data", "Descrição"], ["25/01/2027", "Aniversário da cidade"]]), "Feriados");
@@ -889,6 +975,13 @@ function modelo() {
     ["Apague as linhas de exemplo antes de usar."],
   ]), "Instruções");
   salvar(wb, "modelo-treinamentos-nr.xlsx");
+}
+function modeloCadastro() {
+  const wb = XLSX.utils.book_new();
+  const ws = XLSX.utils.aoa_to_sheet([["Matrícula", "Nome", "Setor", "Função", "Turma"], ["10001", "Maria Exemplo", "Manutenção", "Eletricista", "A"], ["10002", "José Exemplo", "Operação", "Operador", "D"]]);
+  ws["!cols"] = [10, 26, 18, 16, 7].map((w) => ({ wch: w }));
+  XLSX.utils.book_append_sheet(wb, ws, "Colaboradores");
+  salvar(wb, "modelo-colaboradores-turmas.xlsx");
 }
 function modeloEscala() {
   const wb = XLSX.utils.book_new();
@@ -931,6 +1024,16 @@ $("arqEscala").addEventListener("change", async (ev) => {
   } catch (err) { $("avisos").innerHTML = `<div class="msg">${esc(err.message || "Não consegui ler a planilha de escala.")}</div>`; }
   ev.target.value = "";
 });
+$("btnModeloCadastro").addEventListener("click", () => { if (typeof XLSX === "undefined") return toast("A biblioteca de planilhas não carregou."); modeloCadastro(); });
+$("arqCadastro").addEventListener("change", async (ev) => {
+  const f = ev.target.files[0]; if (!f) return;
+  try {
+    const c = parseCadastro(await lerArquivo(f));
+    if (!c.porMat.size && !c.porNome.size) { $("avisos").innerHTML = `<div class="msg">${esc(c.avisos[0])}</div>`; return; }
+    cadastro = c; cadastroNome = f.name; gerar(); toast(`${c.porMat.size || c.porNome.size} colaboradores carregados`);
+  } catch (err) { $("avisos").innerHTML = `<div class="msg">${esc(err.message || "Não consegui ler a planilha de colaboradores.")}</div>`; }
+  ev.target.value = "";
+});
 $("btnModeloEscala").addEventListener("click", () => { if (typeof XLSX === "undefined") return toast("A biblioteca de planilhas não carregou."); modeloEscala(); });
 $("arquivo").addEventListener("change", async (ev) => {
   const f = ev.target.files[0]; if (!f) return;
@@ -942,7 +1045,7 @@ $("arquivo").addEventListener("change", async (ev) => {
   ev.target.value = "";
 });
 $("btnGerar").addEventListener("click", gerar);
-["inicio", "meses", "antecedencia", "capMax", "capMin", "porSemana", "feriadosNac", "escalaPadrao"].forEach((id) => $(id).addEventListener("change", gerar));
+["inicio", "meses", "antecedencia", "capMax", "capMin", "porSemana", "feriadosNac", "escalaPadrao", "projetar"].forEach((id) => $(id).addEventListener("change", gerar));
 $("btnExportar").addEventListener("click", () => { if (typeof XLSX === "undefined") return toast("A biblioteca de planilhas não carregou."); exportar(); });
 $("btnModelo").addEventListener("click", () => { if (typeof XLSX === "undefined") return toast("A biblioteca de planilhas não carregou."); modelo(); });
 $("busca").addEventListener("input", renderVenc);

@@ -5,11 +5,17 @@ Programa para saber quais colaboradores precisam reciclar treinamentos de NR nos
 ## Como usar
 
 1. Abra o arquivo `planejador-nr.html` no navegador (Chrome, Edge ou Firefox). Precisa de internet só para carregar a biblioteca de planilhas.
-2. Clique em **Modelo de treinamentos**, preencha com seus colaboradores (uma linha por colaborador e por NR) e salve.
-3. Clique em **Modelo de escala** e preencha a escala do ano (veja abaixo). Ela fica num arquivo separado porque muda todo ano.
-4. Clique em **Carregar treinamentos** e depois em **Carregar escala** (.xlsx, .xls ou .csv). A ordem não importa.
-5. Ajuste o período, vagas por turma (padrão 12), mínimo por turma (padrão 3) e turmas por semana, se precisar.
-6. Clique em **Exportar resultado (Excel)** para baixar turmas, lista de quem vence e pendências.
+2. Carregue as três planilhas, em qualquer ordem:
+   1. **Escala de revezamento:** a escala do ano, como já é usada (colunas F com as turmas de folga).
+   2. **Colaboradores e turmas:** Matrícula, Nome e Turma (A, B, C, D, E). Setor e Função são opcionais.
+   3. **Treinamentos vencidos e a vencer:** Matrícula, NR e Vencimento (ou Data do Último Treinamento).
+3. Cada campo tem um botão **Modelo** com a planilha pronta para preencher.
+4. Ajuste o período, as vagas (padrão 12), o mínimo por turma (padrão 3) e as turmas por semana, se precisar.
+5. Clique em **Exportar resultado (Excel)** para baixar as turmas, a lista de quem vence e as pendências.
+
+Quando a escala acaba (ex.: em 31/12), o programa continua o ciclo 6x4 sozinho, desde que os últimos dias da escala sigam esse ciclo. As turmas marcadas nesse período aparecem como "pela projeção da escala". Quando a escala do ano seguinte sair, troque só o arquivo da escala.
+
+Feriados não são considerados, a menos que a opção **Pular feriados nacionais** seja marcada.
 
 Os dados ficam só no seu computador; nada é enviado para a internet.
 
@@ -39,10 +45,9 @@ A planilha "Escala de Revezamento" (uma aba por ano, blocos por mês com as colu
 
 - as turmas que aparecem nas colunas **F** são as que estão de folga naquele dia;
 - dá para ter várias abas (2024, 2025, 2026…) no mesmo arquivo; um bloco de JANEIRO no fim do segundo semestre conta como janeiro do ano seguinte;
-- a lista de **Feriados** da própria planilha também é usada;
 - quando sair a escala do ano seguinte, basta incluir a nova aba (ou carregar o novo arquivo).
 
-A planilha de treinamentos precisa da coluna **Turma** (A, B, C, D, E ou "Turma A"…) de cada colaborador.
+A turma de cada colaborador vem da planilha **Colaboradores e turmas** (ou de uma coluna Turma na planilha de treinamentos).
 
 ### Folga por turma (lista)
 
@@ -77,7 +82,7 @@ Sem vencimento, ele é calculado pela data do último treinamento + validade da 
 ## Regras da montagem das turmas
 
 - Entra quem tem treinamento vencido ou vencendo até o fim do período planejado.
-- Turmas só de segunda a sexta, fora de feriados.
+- Turmas só de segunda a sexta (feriados só são pulados se a opção estiver marcada).
 - O treinamento cai numa folga do colaborador, **nunca no primeiro nem no último dia da folga**. Escalas com folga de 1 ou 2 dias (5x2, 6x1) não têm data possível e aparecem em "Sem turma" com o motivo.
 - A data fica dentro da janela de antecedência (padrão 90 dias) e antes do vencimento. Vencidos podem ir em qualquer data, com prioridade.
 - Quem vence primeiro é encaixado primeiro; cada turma é marcada no dia que junta mais gente da mesma NR (no empate, o mais perto do vencimento), respeitando o limite de vagas.
