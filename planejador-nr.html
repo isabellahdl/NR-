@@ -193,6 +193,11 @@ details.cfg summary { cursor: pointer; font-weight: 600; }
       <label class="check"><input type="checkbox" id="feriadosNac"> Pular feriados nacionais</label>
       <button type="button" class="primary" id="btnGerar">Montar turmas</button>
     </div>
+    <details class="cfg" style="margin-top:14px" open>
+      <summary>Treinamentos: nome, código, horário, local e vagas</summary>
+      <div class="tablewrap" style="margin-top:10px"><table id="tblTreinos"></table></div>
+      <p class="slot-d" style="margin-top:6px">Esses dados vão para a programação exportada. Ficam guardados neste navegador. Vagas em branco usam o valor de "Vagas por turma".</p>
+    </details>
     <details class="cfg" style="margin-top:14px">
       <summary>Validade de cada NR (usada quando a planilha não tem a data de vencimento)</summary>
       <div class="cfg-grid" id="validades"></div>
@@ -237,7 +242,7 @@ details.cfg summary { cursor: pointer; font-weight: 600; }
         <li>Depois o programa tenta garantir o mínimo de turmas por semana, movendo colaboradores que também podem ir naquela semana, sem deixar a turma de origem abaixo do mínimo. Semanas onde não deu ficam marcadas.</li>
         <li>Toda turma tem entre o mínimo e o máximo de pessoas (padrão: 3 a 12). Se não houver pelo menos o mínimo de pessoas da mesma NR com folga possível no mesmo dia, o colaborador vai para <b>Sem turma</b> com esse motivo.</li>
         <li>Cada turma de treinamento junta só pessoas do <b>mesmo treinamento (NR)</b> e da <b>mesma turma da escala</b> (A, B, C…), que estão de folga juntas.</li>
-        <li>Ninguém faz dois treinamentos no mesmo dia.</li>
+        <li>Ninguém faz dois treinamentos no mesmo dia, e cada treinamento tem no máximo uma turma por dia (mesmo horário e local). Colaboradores de negócios diferentes (KR e KE) podem ficar na mesma turma.</li>
       </ul>
     </div>
     <div class="panel">
@@ -350,6 +355,24 @@ const NR_NOMES = {
   "NR-35": "Trabalho em Altura", "NR-36": "Abate e Processamento de Carnes", "NR-37": "Plataformas de Petróleo", "NR-38": "Limpeza Urbana",
 };
 const nomeTreinamento = (nr) => NR_NOMES[baseNR(nr)] || "";
+// código, horário, local e vagas de cada treinamento (editáveis na tela; lembrados neste navegador)
+let treinosSalvos = {};
+try { treinosSalvos = JSON.parse(localStorage.getItem("nr-treinos") || "{}") || {}; } catch (e) { treinosSalvos = {}; }
+function salvarTreinos() { try { localStorage.setItem("nr-treinos", JSON.stringify(treinosSalvos)); } catch (e) { /* sem armazenamento: vale só nesta sessão */ } }
+function infoTreino(nr) {
+  const linhas = dados.rows.filter((r) => r.nr === nr);
+  const primeiro = (k) => (linhas.find((r) => r[k]) || {})[k] || "";
+  const bruto = primeiro("nomeTreino");
+  const nomePlanilha = bruto && normNR(bruto) !== baseNR(nr) ? bruto : "";
+  const s = treinosSalvos[nr] || {};
+  return {
+    nome: s.nome || nomePlanilha || (nomeTreinamento(nr) ? `${baseNR(nr)} – ${nomeTreinamento(nr)}` : nr),
+    codigo: s.codigo ?? primeiro("codTreino"),
+    horario: s.horario ?? (primeiro("horario") || "09 às 11"),
+    local: s.local ?? primeiro("local"),
+    vagas: +s.vagas || 0,
+  };
+}
 
 // ---------- leitura da planilha ----------
 const norm = (s) => String(s).normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase().replace(/[^a-z0-9]/g, "");
@@ -359,6 +382,11 @@ const COLS = {
   setor: ["setor", "area", "departamento", "centrodecusto", "gerencia"],
   funcao: ["funcao", "cargo"],
   nr: ["nr", "treinamento", "norma", "curso", "normaregulamentadora"],
+  nomeTreino: ["nomedotreinamento", "nometreinamento", "descricaodotreinamento", "descricaotreinamento", "nomedocurso", "nomecurso", "descricaocurso", "descricaodocurso"],
+  codTreino: ["codigodotreinamento", "codigotreinamento", "codtreinamento", "codigodocurso", "codigocurso", "codcurso", "codigo", "cod"],
+  horario: ["horario", "horariodotreinamento", "hora", "horas"],
+  local: ["local", "localdotreinamento", "localtreinamento", "sala"],
+  negocio: ["negocio", "unidadedenegocio", "unidade", "empresa", "bu"],
   ultimo: ["dataultimotreinamento", "ultimotreinamento", "datadoultimotreinamento", "datatreinamento", "realizadoem", "dataderealizacao", "datarealizacao", "realizacao", "conclusao", "dataconclusao"],
   vencimento: ["vencimento", "datavencimento", "datadevencimento", "validade", "venceem", "datavalidade", "proximovencimento"],
   escala: ["escala", "regime", "escaladetrabalho", "tipodeescala", "tipoescala"],
@@ -392,10 +420,10 @@ function parseCadastro(wb) {
     for (let k = 0; k < Math.min(15, aoa.length); k++) { const m = mapHeaders(aoa[k].map((c) => String(c ?? ""))); if (m.grupo && (m.matricula || m.nome)) { hi = k; map = m; break; } }
     if (hi < 0) continue;
     const head = aoa[hi].map((c) => String(c ?? "")), col = (f) => (map[f] != null ? head.indexOf(map[f]) : -1);
-    const cM = col("matricula"), cN = col("nome"), cT = col("grupo"), cS = col("setor"), cF = col("funcao");
+    const cM = col("matricula"), cN = col("nome"), cT = col("grupo"), cS = col("setor"), cF = col("funcao"), cNg = col("negocio");
     for (const r of aoa.slice(hi + 1)) {
       const turma = String(r[cT] ?? "").trim(); if (!turma) continue;
-      const e = { turma, nome: cN >= 0 ? String(r[cN]).trim() : "", setor: cS >= 0 ? String(r[cS]).trim() : "", funcao: cF >= 0 ? String(r[cF]).trim() : "" };
+      const e = { turma, nome: cN >= 0 ? String(r[cN]).trim() : "", setor: cS >= 0 ? String(r[cS]).trim() : "", funcao: cF >= 0 ? String(r[cF]).trim() : "", negocio: cNg >= 0 ? String(r[cNg]).trim() : "" };
       if (cM >= 0 && String(r[cM]).trim()) out.porMat.set(keyMat(r[cM]), e);
       if (e.nome) out.porNome.set(norm(e.nome), e);
       out.turmas.add(keyGrupo(turma).toUpperCase());
@@ -442,6 +470,11 @@ function parseWorkbook(wb) {
       base: map.base ? parseDate(r[map.base]) : null,
       iniFolga: map.iniFolga ? parseDate(r[map.iniFolga]) : null,
       grupo: String(r[map.grupo] ?? "").trim(),
+      negocio: String(r[map.negocio] ?? "").trim(),
+      nomeTreino: String((map.nomeTreino ? r[map.nomeTreino] : r[map.nr]) ?? "").trim(),
+      codTreino: String(r[map.codTreino] ?? "").trim(),
+      horario: String(r[map.horario] ?? "").trim(),
+      local: String(r[map.local] ?? "").trim(),
     });
   });
   return out;
@@ -675,7 +708,7 @@ function planejar(dados, cfg) {
     const naEscala = (g) => !!g && !!escalaDados && escalaDados.porGrupo.has(keyGrupo(g));
     const opcoes = [[cad?.turma, "planilha de colaboradores e turmas"], [r0.grupo, "planilha de treinamentos"]].filter(([g]) => g);
     const [grupo, grupoOrigem] = opcoes.find(([g]) => naEscala(g)) || opcoes[0] || ["", ""];
-    const r = { ...r0, grupo, grupoOrigem, nome: r0.nome || cad?.nome || "", setor: r0.setor || cad?.setor || "", funcao: r0.funcao || cad?.funcao || "" };
+    const r = { ...r0, grupo, grupoOrigem, nome: r0.nome || cad?.nome || "", setor: r0.setor || cad?.setor || "", funcao: r0.funcao || cad?.funcao || "", negocio: r0.negocio || cad?.negocio || "" };
     let venc = r.vencimento;
     if (venc == null && r.ultimo != null) { const meses = validades[baseNR(r.nr)]; if (meses) venc = addMonths(r.ultimo, meses); }
     const item = { ...r, venc, status: "", turma: null, motivo: "", cands: [], semCadastro: !!cadastro && !cad };
@@ -703,6 +736,8 @@ function planejar(dados, cfg) {
   }
 
   const ativos = itens.filter((i) => i.cands.length);
+  const capCache = new Map();
+  const cap = (nr) => { if (!capCache.has(nr)) capCache.set(nr, infoTreino(nr).vagas || cfg.capMax); return capCache.get(nr); };
   // mesma turma de treinamento = mesma NR e mesma turma da escala (quando a escala é por turma)
   ativos.forEach((i, k) => {
     i.id = k; i.candSet = new Set(i.cands);
@@ -714,6 +749,7 @@ function planejar(dados, cfg) {
   const mark = (it, d, on) => { if (!ocupado.has(it.matricula)) ocupado.set(it.matricula, new Set()); on ? ocupado.get(it.matricula).add(d) : ocupado.get(it.matricula).delete(d); };
   const turmas = [];
   const turmaKey = new Map(); // nr§turmaEscala|dia -> turma
+  const nrNoDia = (nr, d) => turmas.some((t) => t.membros.length && t.nr === nr && t.dia === d);
   const add = (t, it) => { t.membros.push(it); it.turma = t; mark(it, t.dia, true); };
   const remove = (t, it) => { t.membros = t.membros.filter((x) => x !== it); it.turma = null; mark(it, t.dia, false); };
 
@@ -724,17 +760,18 @@ function planejar(dados, cfg) {
     if (!livres.length) { u.motivo = "Todas as datas possíveis já estão ocupadas com outro treinamento"; continue; }
     // 1) turma existente com vaga
     let alvo = null;
-    for (const d of livres) { const t = turmaKey.get(u.ckey + "|" + d); if (t && t.membros.length < cfg.capMax && (!alvo || t.membros.length > alvo.membros.length)) alvo = t; }
+    for (const d of livres) { const t = turmaKey.get(u.ckey + "|" + d); if (t && t.membros.length < cap(u.nr) && (!alvo || t.membros.length > alvo.membros.length)) alvo = t; }
     if (alvo) { add(alvo, u); continue; }
-    // 2) nova turma no dia que junta mais gente da mesma NR
+    // 2) nova turma no dia que junta mais gente da mesma NR (sem repetir o treinamento no mesmo dia/horário)
     let best = null, bestN = -1;
-    for (const d of livres) {
+    const semConflito = livres.filter((d) => !nrNoDia(u.nr, d));
+    for (const d of semConflito.length ? semConflito : livres) {
       let n = 0; for (const o of fila) if (!o.turma && o.ckey === u.ckey && o.candSet.has(d) && !isBusy(o, d)) n++;
       if (n >= bestN) { best = d; bestN = n; } // empate: data mais perto do vencimento
     }
     const t = { nr: u.nr, ckey: u.ckey, turmaEscala: u.turmaEscala, dia: best, membros: [] }; turmas.push(t); turmaKey.set(u.ckey + "|" + best, t);
     add(t, u);
-    for (const o of fila) { if (t.membros.length >= cfg.capMax) break; if (o !== u && !o.turma && o.ckey === u.ckey && o.candSet.has(best) && !isBusy(o, best)) add(t, o); }
+    for (const o of fila) { if (t.membros.length >= cap(u.nr)) break; if (o !== u && !o.turma && o.ckey === u.ckey && o.candSet.has(best) && !isBusy(o, best)) add(t, o); }
   }
 
   // semanas do período
@@ -752,20 +789,21 @@ function planejar(dados, cfg) {
         for (let d = Math.max(w, inicio); d <= Math.min(w + 4, fim); d++) {
           for (const nr of nrs) {
             if (turmaKey.has(nr + "|" + d) && turmaKey.get(nr + "|" + d).membros.length) continue;
+            if (nrNoDia(nr.split("§")[0], d)) continue;
             // simula quem pode mudar para (nr, d)
             const tamanho = new Map(turmas.map((t) => [t, t.membros.length]));
             const mov = [];
             const cands = ativos.filter((i) => i.turma && i.ckey === nr && i.candSet.has(d) && !isBusy(i, d))
               .sort((a, b) => tamanho.get(b.turma) - tamanho.get(a.turma));
             for (const i of cands) {
-              if (mov.length >= cfg.capMax) break;
+              if (mov.length >= cap(nr.split("§")[0])) break;
               const origemSemana = monday(i.turma.dia);
               const deixaVazia = tamanho.get(i.turma) - 1 === 0;
               if (tamanho.get(i.turma) - 1 >= cfg.capMin || (deixaVazia && origemSemana !== w && porSemana(origemSemana) > cfg.porSemana)) {
                 mov.push(i); tamanho.set(i.turma, tamanho.get(i.turma) - 1);
               }
             }
-            if (mov.length >= Math.min(cfg.capMin, cfg.capMax) && (!melhor || mov.length > melhor.mov.length)) melhor = { d, nr, mov };
+            if (mov.length >= Math.min(cfg.capMin, cap(nr.split("§")[0])) && (!melhor || mov.length > melhor.mov.length)) melhor = { d, nr, mov };
           }
         }
         if (!melhor) break;
@@ -785,7 +823,7 @@ function planejar(dados, cfg) {
     for (const i of [...t.membros]) {
       let destino = null;
       for (const o of vivas()) {
-        if (o === t || o.ckey !== t.ckey || o.membros.length >= cfg.capMax || !i.candSet.has(o.dia) || isBusy(i, o.dia)) continue;
+        if (o === t || o.ckey !== t.ckey || o.membros.length >= cap(t.nr) || !i.candSet.has(o.dia) || isBusy(i, o.dia)) continue;
         if (o.membros.length < t.membros.length && o.membros.length < cfg.capMin) continue;
         if (!destino || o.membros.length > destino.membros.length) destino = o;
       }
@@ -807,7 +845,12 @@ function planejar(dados, cfg) {
 
   const finais = turmas.filter((t) => t.membros.length).sort((a, b) => a.dia - b.dia || a.nr.localeCompare(b.nr));
   const seqNR = new Map();
-  finais.forEach((t) => { const n = (seqNR.get(t.nr) || 0) + 1; seqNR.set(t.nr, n); t.codigo = `${t.nr} – T${pad(n)}`; t.titulo = nomeTreinamento(t.nr); });
+  finais.forEach((t) => { t.conflito = finais.some((o) => o !== t && o.nr === t.nr && o.dia === t.dia); });
+  finais.forEach((t) => {
+    const b = baseNR(t.nr), n = (seqNR.get(b) || 0) + 1; seqNR.set(b, n);
+    const info = infoTreino(t.nr);
+    Object.assign(t, { codigo: `${b} – T${pad(n)}`, titulo: info.nome, codTreino: info.codigo, horario: info.horario, local: info.local, vagas: cap(t.nr) });
+  });
   finais.forEach((t, k) => { t.projetada = t.membros.some((i) => i.projApos != null && t.dia > i.projApos); t.membros.sort((a, b) => a.venc - b.venc || a.nome.localeCompare(b.nome)); });
   itens.forEach((i) => { if (i.turma) i.motivo = ""; else if (!i.motivo && i.status !== "sem-data") i.motivo = "Não foi possível encaixar"; });
   return { inicio, fim, itens, turmas: finais, semanas, feriados, cfg };
@@ -832,7 +875,7 @@ function exemplo() {
       const nr = nrs[k];
       const venc = hoje - 20 + Math.floor(rnd() * 140);
       const ultimo = addMonths(venc, -(VALIDADE_PADRAO[nr] || 24));
-      rows.push({ linha: rows.length + 2, matricula: String(10200 + i), nome, setor, funcao, nr, ultimo, vencimento: venc, escala: "", base, grupo });
+      rows.push({ linha: rows.length + 2, matricula: String(10200 + i), nome, setor, funcao, nr, ultimo, vencimento: venc, escala: "", base, grupo, negocio: i % 3 ? "KR" : "KE" });
     }
   }
   return { rows, folgas: new Map(), feriados: [], avisos: [] };
@@ -847,6 +890,16 @@ function toast(msg) { const t = $("toast"); t.textContent = msg; t.hidden = fals
 function lerCfg() {
   const num = (id, def) => { const v = parseInt($(id).value, 10); return isFinite(v) ? v : def; };
   return { inicio: parseDate($("inicio").value) ?? todayDay(), meses: Math.max(1, num("meses", 3)), antecedencia: Math.max(0, num("antecedencia", 90)), capMax: Math.max(1, num("capMax", 12)), capMin: Math.min(Math.max(1, num("capMin", 3)), Math.max(1, num("capMax", 12))), porSemana: Math.max(0, num("porSemana", 2)), feriadosNac: $("feriadosNac").checked };
+}
+function renderTreinos() {
+  const nrs = [...new Set(dados.rows.map((r) => r.nr))].sort();
+  const inp = (nr, k, v, ph, tipo = "text", w = "") => `<input type="${tipo}" ${tipo === "number" ? 'min="1" max="200"' : ""} data-nr="${esc(nr)}" data-k="${k}" value="${esc(v)}" placeholder="${esc(ph)}" aria-label="${k}" style="font:inherit;color:var(--ink);background:var(--bg);border:1px solid var(--line);border-radius:6px;padding:5px 7px;width:${w || "100%"}">`;
+  $("tblTreinos").innerHTML = `<thead><tr><th>Treinamento</th><th>Código</th><th>Horário</th><th>Local</th><th>Vagas</th></tr></thead><tbody>` +
+    nrs.map((nr) => { const i = infoTreino(nr); return `<tr><td style="min-width:16rem">${inp(nr, "nome", i.nome, nr)}</td><td>${inp(nr, "codigo", i.codigo, "ex.: 50593294", "text", "8.5rem")}</td><td>${inp(nr, "horario", i.horario, "ex.: 09 às 11", "text", "7rem")}</td><td style="min-width:12rem">${inp(nr, "local", i.local, "ex.: Oficina Escola PA")}</td><td>${inp(nr, "vagas", i.vagas || "", String(lerCfg().capMax), "number", "4.5rem")}</td></tr>`; }).join("") + `</tbody>`;
+  $("tblTreinos").querySelectorAll("input").forEach((el) => el.addEventListener("change", () => {
+    const nr = el.dataset.nr; treinosSalvos[nr] = { ...(treinosSalvos[nr] || {}), [el.dataset.k]: el.value.trim() };
+    salvarTreinos(); gerar();
+  }));
 }
 function renderValidades() {
   const nrs = new Set([...Object.keys(validades), ...dados.rows.map((r) => baseNR(r.nr))]);
@@ -922,10 +975,10 @@ function gerar() {
     const body = ts.length ? ts.map((t) => `
       <details class="turma"><summary>
         <span class="date">${DOW[dow(t.dia)]} ${fmt(t.dia)}</span>
-        <span class="nr">${esc(t.codigo)}${t.turmaEscala ? ` <span class="pill neutral">turma ${esc(t.turmaEscala)} da escala</span>` : ""}${t.titulo ? `<span class="titulo">${esc(t.titulo)}</span>` : ""}</span>
-        <span>${t.projetada ? `<span class="pill neutral" title="A escala carregada termina antes desta data; o dia foi calculado repetindo o ciclo">pela projeção da escala</span> ` : ""}${t.membros.length < cfg.capMin ? `<span class="pill warn">${t.membros.length} pessoa${t.membros.length === 1 ? "" : "s"} · abaixo do mínimo</span>` : `<span class="pill neutral">${t.membros.length} de ${cfg.capMax} vagas</span>`}</span>
-      </summary><div class="members tablewrap"><table><thead><tr><th>Matrícula</th><th>Nome</th><th>Setor</th><th>Escala</th><th>Vencimento</th><th>Situação</th></tr></thead><tbody>
-        ${t.membros.map((i) => `<tr><td>${esc(i.matricula)}</td><td>${esc(i.nome)}</td><td>${esc(i.setor)}</td><td>${esc(i.escala)}</td><td class="dt">${fmt(i.venc)}</td><td>${situacao(i)}</td></tr>`).join("")}
+        <span class="nr">${esc(t.codigo)}${t.turmaEscala ? ` <span class="pill neutral">turma ${esc(t.turmaEscala)} da escala</span>` : ""}${t.titulo ? `<span class="titulo">${esc(t.titulo)}</span>` : ""}<span class="titulo">${esc([t.horario, t.local, t.codTreino && "cód. " + t.codTreino].filter(Boolean).join(" · "))}</span></span>
+        <span>${t.conflito ? `<span class="pill bad" title="Não havia outro dia de folga possível para estes colaboradores">mesmo dia de outra turma deste treinamento</span> ` : ""}${t.projetada ? `<span class="pill neutral" title="A escala carregada termina antes desta data; o dia foi calculado repetindo o ciclo">pela projeção da escala</span> ` : ""}${t.membros.length < cfg.capMin ? `<span class="pill warn">${t.membros.length} pessoa${t.membros.length === 1 ? "" : "s"} · abaixo do mínimo</span>` : `<span class="pill neutral">${t.membros.length} de ${t.vagas} vagas</span>`}</span>
+      </summary><div class="members tablewrap"><table><thead><tr><th>Matrícula</th><th>Nome</th><th>Negócio</th><th>Setor</th><th>Escala</th><th>Vencimento</th><th>Situação</th></tr></thead><tbody>
+        ${t.membros.map((i) => `<tr><td>${esc(i.matricula)}</td><td>${esc(i.nome)}</td><td>${esc(i.negocio)}</td><td>${esc(i.setor)}</td><td>${esc(i.escala)}</td><td class="dt">${fmt(i.venc)}</td><td>${situacao(i)}</td></tr>`).join("")}
       </tbody></table></div></details>`).join("") : `<div class="empty-week">Nenhuma turma possível nesta semana.</div>`;
     return `<article class="week"><div class="week-h"><h3>Semana de ${fmtShort(Math.max(w, R.inicio))} a ${fmtShort(Math.min(w + 4, R.fim))}${fer ? ` <span class="range">· feriado: ${fer}</span>` : ""}</h3>${pill}</div>${body}</article>`;
   }).join("");
@@ -948,9 +1001,9 @@ function renderVenc() {
   for (const i of lista) {
     const mes = i.venc == null ? "Sem data de vencimento" : i.vencido ? "Já vencidos" : (() => { const [y, m] = ymd(i.venc); return `${MESES[m - 1]} de ${y}`; })();
     if (mes !== mesAtual) { mesAtual = mes; html += `<tr class="month"><td colspan="9">${esc(mes.charAt(0).toUpperCase() + mes.slice(1))}</td></tr>`; }
-    html += `<tr><td>${esc(i.matricula)}</td><td>${esc(i.nome)}</td><td>${esc(i.setor)}</td><td>${esc(i.nr)}</td><td class="dt">${fmt(i.venc)}</td><td>${situacao(i)}</td><td>${esc(i.escala)}</td><td class="dt">${i.turma ? `${esc(i.turma.codigo)} · ${DOW[dow(i.turma.dia)]} ${fmt(i.turma.dia)}` : `<span class="pill warn">sem turma</span>`}</td></tr>`;
+    html += `<tr><td>${esc(i.matricula)}</td><td>${esc(i.nome)}</td><td>${esc(i.negocio)}</td><td>${esc(infoTreino(i.nr).nome)}</td><td class="dt">${fmt(i.venc)}</td><td>${situacao(i)}</td><td>${esc(i.escala)}</td><td class="dt">${i.turma ? `${esc(i.turma.codigo)} · ${DOW[dow(i.turma.dia)]} ${fmt(i.turma.dia)}` : `<span class="pill warn">sem turma</span>`}</td></tr>`;
   }
-  $("tblVenc").innerHTML = `<thead><tr><th>Matrícula</th><th>Nome</th><th>Setor</th><th>NR</th><th>Vencimento</th><th>Situação</th><th>Escala</th><th>Turma</th></tr></thead><tbody>${html || `<tr><td colspan="8">Nenhum treinamento encontrado.</td></tr>`}</tbody>`;
+  $("tblVenc").innerHTML = `<thead><tr><th>Matrícula</th><th>Nome</th><th>Negócio</th><th>Treinamento</th><th>Vencimento</th><th>Situação</th><th>Escala</th><th>Turma</th></tr></thead><tbody>${html || `<tr><td colspan="8">Nenhum treinamento encontrado.</td></tr>`}</tbody>`;
 }
 
 // ---------- arquivos ----------
@@ -966,15 +1019,33 @@ async function salvar(wb, filename) {
   }
   XLSX.writeFile(wb, filename);
 }
+const DIA_NOME = ["Domingo", "Segunda", "Terça", "Quarta", "Quinta", "Sexta", "Sábado"];
+function folhaProgramacao(R) {
+  const head = ["Data", "Dia", "Horário", "Local", "Código", "Treinamento", "Matrícula", "Nome", "Negócio", "Convocado", "Realizado"];
+  const aoa = [head], merges = [];
+  for (const t of R.turmas) {
+    const ini = aoa.length;
+    t.membros.forEach((i, k) => aoa.push(k === 0
+      ? [fmt(t.dia), DIA_NOME[dow(t.dia)], t.horario, t.local, t.codTreino, t.titulo, i.matricula, i.nome, i.negocio, "Não", "Não"]
+      : ["", "", "", "", "", "", i.matricula, i.nome, i.negocio, "Não", "Não"]));
+    if (t.membros.length > 1) for (let c = 0; c < 6; c++) merges.push({ s: { r: ini, c }, e: { r: aoa.length - 1, c } });
+    aoa.push([]);
+  }
+  const ws = XLSX.utils.aoa_to_sheet(aoa);
+  ws["!merges"] = merges;
+  ws["!cols"] = [12, 10, 10, 20, 12, 36, 11, 36, 9, 11, 11].map((w) => ({ wch: w }));
+  return ws;
+}
 function exportar() {
   if (!resultado) return;
   const R = resultado, wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, folhaProgramacao(R), "Programação");
   const turmasRows = [];
-  R.turmas.forEach((t) => t.membros.forEach((i) => turmasRows.push({ Turma: t.codigo, Treinamento: t.titulo ? `${t.nr} – ${t.titulo}` : t.nr, "Turma da escala": t.turmaEscala || "", Data: fmt(t.dia), "Dia da semana": DOW[dow(t.dia)], Matrícula: i.matricula, Nome: i.nome, Setor: i.setor, Função: i.funcao, Escala: i.escala, Vencimento: fmt(i.venc) })));
+  R.turmas.forEach((t) => t.membros.forEach((i) => turmasRows.push({ Turma: t.codigo, Treinamento: t.titulo, "Código": t.codTreino, "Turma da escala": t.turmaEscala || "", Data: fmt(t.dia), "Dia da semana": DIA_NOME[dow(t.dia)], Horário: t.horario, Local: t.local, Matrícula: i.matricula, Nome: i.nome, Negócio: i.negocio, Setor: i.setor, Função: i.funcao, Escala: i.escala, Vencimento: fmt(i.venc) })));
   XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(turmasRows.length ? turmasRows : [{ Turma: "Nenhuma turma" }]), "Turmas");
-  XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(R.turmas.map((t) => ({ Turma: t.codigo, Treinamento: t.titulo ? `${t.nr} – ${t.titulo}` : t.nr, "Turma da escala": t.turmaEscala || "", Data: fmt(t.dia), "Dia da semana": DOW[dow(t.dia)], Participantes: t.membros.length, Observação: t.projetada ? "Data calculada pela projeção da escala (depois do fim da planilha)" : "" }))), "Resumo das turmas");
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(R.turmas.map((t) => ({ Turma: t.codigo, Treinamento: t.titulo, "Código": t.codTreino, "Turma da escala": t.turmaEscala || "", Data: fmt(t.dia), "Dia da semana": DIA_NOME[dow(t.dia)], Horário: t.horario, Local: t.local, Participantes: t.membros.length, Observação: t.projetada ? "Data calculada pela projeção da escala (depois do fim da planilha)" : "" }))), "Resumo das turmas");
   XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(R.semanas.map((w) => { const n = R.turmas.filter((t) => monday(t.dia) === w).length; return { Semana: `${fmt(Math.max(w, R.inicio))} a ${fmt(Math.min(w + 4, R.fim))}`, Turmas: n, "Atende mínimo": n >= R.cfg.porSemana ? "Sim" : "Não" }; })), "Semanas");
-  XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet([...R.itens].sort((a, b) => (a.venc ?? 1e9) - (b.venc ?? 1e9)).map((i) => ({ Matrícula: i.matricula, Nome: i.nome, Setor: i.setor, NR: i.nr, Treinamento: nomeTreinamento(i.nr), Vencimento: fmt(i.venc), Situação: i.status === "sem-data" ? "Sem data" : i.vencido ? "Vencido" : `Vence em ${i.diasAte} dias`, Escala: i.escala, Turma: i.turma ? i.turma.codigo : "", "Data da turma": i.turma ? fmt(i.turma.dia) : "", Motivo: i.turma ? "" : i.motivo }))), "A vencer");
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet([...R.itens].sort((a, b) => (a.venc ?? 1e9) - (b.venc ?? 1e9)).map((i) => ({ Matrícula: i.matricula, Nome: i.nome, Setor: i.setor, Negócio: i.negocio, NR: i.nr, Treinamento: infoTreino(i.nr).nome, Vencimento: fmt(i.venc), Situação: i.status === "sem-data" ? "Sem data" : i.vencido ? "Vencido" : `Vence em ${i.diasAte} dias`, Escala: i.escala, Turma: i.turma ? i.turma.codigo : "", "Data da turma": i.turma ? fmt(i.turma.dia) : "", Motivo: i.turma ? "" : i.motivo }))), "A vencer");
   const pend = R.itens.filter((i) => !i.turma);
   XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(pend.length ? pend.map((i) => ({ Matrícula: i.matricula, Nome: i.nome, NR: i.nr, Vencimento: fmt(i.venc), Escala: i.escala, Motivo: i.motivo })) : [{ Matrícula: "Nenhuma pendência" }]), "Sem turma");
   salvar(wb, `turmas-nr-${fmt(R.inicio).replace(/\//g, "-")}.xlsx`);
@@ -982,12 +1053,12 @@ function exportar() {
 function modelo() {
   const wb = XLSX.utils.book_new();
   const ws = XLSX.utils.aoa_to_sheet([
-    ["Matrícula", "Nome", "NR", "Data Último Treinamento", "Vencimento"],
-    ["10001", "Maria Exemplo", "NR-10", "15/01/2025", "15/01/2027"],
-    ["10001", "Maria Exemplo", "NR-35", "20/12/2024", ""],
-    ["10002", "José Exemplo", "NR-33", "10/02/2026", ""],
+    ["Matrícula", "Nome", "Código do Treinamento", "Treinamento", "Data Último Treinamento", "Vencimento"],
+    ["10001", "Maria Exemplo", "50593294", "NR18 serviço a quente - Prático", "15/01/2025", "15/01/2027"],
+    ["10001", "Maria Exemplo", "", "NR-35", "20/12/2024", ""],
+    ["10002", "José Exemplo", "", "NR-33", "10/02/2026", ""],
   ]);
-  ws["!cols"] = [10, 26, 8, 22, 12].map((w) => ({ wch: w }));
+  ws["!cols"] = [10, 26, 20, 32, 22, 12].map((w) => ({ wch: w }));
   XLSX.utils.book_append_sheet(wb, ws, "Colaboradores");
   XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([["Matrícula", "Data"], ["10003", "18/11/2026"], ["10003", "19/11/2026"], ["10003", "20/11/2026"]]), "Folgas");
   XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([["Data", "Descrição"], ["25/01/2027", "Aniversário da cidade"]]), "Feriados");
@@ -1005,8 +1076,8 @@ function modelo() {
 }
 function modeloCadastro() {
   const wb = XLSX.utils.book_new();
-  const ws = XLSX.utils.aoa_to_sheet([["Matrícula", "Nome", "Setor", "Função", "Turma"], ["10001", "Maria Exemplo", "Manutenção", "Eletricista", "A"], ["10002", "José Exemplo", "Operação", "Operador", "D"]]);
-  ws["!cols"] = [10, 26, 18, 16, 7].map((w) => ({ wch: w }));
+  const ws = XLSX.utils.aoa_to_sheet([["Matrícula", "Nome", "Negócio", "Setor", "Função", "Turma"], ["10001", "Maria Exemplo", "KR", "Manutenção", "Eletricista", "A"], ["10002", "José Exemplo", "KE", "Operação", "Operador", "D"]]);
+  ws["!cols"] = [10, 26, 9, 18, 16, 7].map((w) => ({ wch: w }));
   XLSX.utils.book_append_sheet(wb, ws, "Colaboradores");
   salvar(wb, "modelo-colaboradores-turmas.xlsx");
 }
@@ -1067,7 +1138,7 @@ $("arquivo").addEventListener("change", async (ev) => {
   try {
     const d = parseWorkbook(await lerArquivo(f));
     if (!d.rows.length) { $("avisos").innerHTML = `<div class="msg">${esc(d.avisos[0] || "Nenhuma linha válida encontrada na planilha.")}</div>`; return; }
-    dados = d; fonteNome = f.name; renderValidades(); gerar(); toast(`${d.rows.length} linhas carregadas`);
+    dados = d; fonteNome = f.name; renderValidades(); renderTreinos(); gerar(); toast(`${d.rows.length} linhas carregadas`);
   } catch (e) { $("avisos").innerHTML = `<div class="msg">${esc(e.message || "Não consegui ler o arquivo.")}</div>`; }
   ev.target.value = "";
 });
@@ -1083,6 +1154,7 @@ document.querySelectorAll(".tabs button").forEach((b) => b.addEventListener("cli
 }));
 { const [y, m, d] = ymd(todayDay()); $("inicio").value = `${y}-${pad(m)}-${pad(d)}`; }
 renderValidades();
+renderTreinos();
 gerar();
 </script>
 </body>

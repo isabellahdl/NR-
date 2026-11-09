@@ -7,11 +7,15 @@ Programa para saber quais colaboradores precisam reciclar treinamentos de NR nos
 1. Abra o arquivo `planejador-nr.html` no navegador (Chrome, Edge ou Firefox). Precisa de internet só para carregar a biblioteca de planilhas.
 2. Carregue as três planilhas, em qualquer ordem:
    1. **Escala de revezamento:** a escala do ano, como já é usada (colunas F com as turmas de folga).
-   2. **Colaboradores e turmas:** Matrícula, Nome e Turma (A, B, C, D, E). Setor e Função são opcionais.
-   3. **Treinamentos vencidos e a vencer:** Matrícula, NR e Vencimento (ou Data do Último Treinamento).
+   2. **Colaboradores e turmas:** Matrícula, Nome, Negócio (KR, KE) e Turma (A, B, C, D, E). Setor e Função são opcionais.
+   3. **Treinamentos vencidos e a vencer:** Matrícula, Treinamento (ex.: "NR18 serviço a quente - Prático" ou "NR-35"), Código (opcional) e Vencimento (ou Data do Último Treinamento).
 3. Cada campo tem um botão **Modelo** com a planilha pronta para preencher.
 4. Ajuste o período, as vagas (padrão 12), o mínimo por turma (padrão 3) e as turmas por semana, se precisar.
 5. Clique em **Exportar resultado (Excel)** para baixar as turmas, a lista de quem vence e as pendências.
+
+Na tela, a tabela **Treinamentos: nome, código, horário, local e vagas** define como cada treinamento aparece na programação e o limite de vagas de cada um (ex.: prático com 4 vagas). Esses dados ficam guardados no navegador. Se a planilha de treinamentos tiver colunas Código, Horário ou Local, elas já vêm preenchidas.
+
+A exportação começa pela aba **Programação**, no mesmo formato da planilha feita à mão: Data, Dia, Horário, Local, Código, Treinamento, Matrícula, Nome, Negócio (KR/KE), Convocado e Realizado, com as células de cada turma mescladas e uma linha em branco entre as turmas.
 
 Quando a escala acaba (ex.: em 31/12), o programa continua o ciclo 6x4 sozinho, desde que os últimos dias da escala sigam esse ciclo. As turmas marcadas nesse período aparecem como "pela projeção da escala". Quando a escala do ano seguinte sair, troque só o arquivo da escala.
 
@@ -89,4 +93,4 @@ Sem vencimento, ele é calculado pela data do último treinamento + validade da 
 - O programa tenta garantir **pelo menos 2 turmas por semana** (configurável), remanejando colaboradores sem deixar nenhuma turma abaixo do mínimo. Semanas em que não houve gente suficiente ficam sinalizadas.
 - Toda turma tem **no mínimo 3 e no máximo 12 pessoas** (configurável). Se não houver 3 pessoas da mesma NR com folga possível no mesmo dia, o colaborador aparece em "Sem turma" com esse motivo.
 - Cada turma de treinamento junta só pessoas do **mesmo treinamento (NR)** e da **mesma turma da escala** (A, B, C…).
-- Ninguém é colocado em dois treinamentos no mesmo dia.
+- Ninguém é colocado em dois treinamentos no mesmo dia, e cada treinamento tem no máximo uma turma por dia (mesmo horário e local).
