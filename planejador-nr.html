@@ -236,6 +236,7 @@ details.cfg summary { cursor: pointer; font-weight: 600; }
         <li>Quem vence primeiro é encaixado primeiro. Cada turma escolhe o dia que reúne mais colaboradores da mesma NR, até o limite de vagas.</li>
         <li>Depois o programa tenta garantir o mínimo de turmas por semana, movendo colaboradores que também podem ir naquela semana, sem deixar a turma de origem abaixo do mínimo. Semanas onde não deu ficam marcadas.</li>
         <li>Toda turma tem entre o mínimo e o máximo de pessoas (padrão: 3 a 12). Se não houver pelo menos o mínimo de pessoas da mesma NR com folga possível no mesmo dia, o colaborador vai para <b>Sem turma</b> com esse motivo.</li>
+        <li>Cada turma de treinamento junta só pessoas do <b>mesmo treinamento (NR)</b> e da <b>mesma turma da escala</b> (A, B, C…), que estão de folga juntas.</li>
         <li>Ninguém faz dois treinamentos no mesmo dia.</li>
       </ul>
     </div>
@@ -702,12 +703,17 @@ function planejar(dados, cfg) {
   }
 
   const ativos = itens.filter((i) => i.cands.length);
-  ativos.forEach((i, k) => { i.id = k; i.candSet = new Set(i.cands); });
+  // mesma turma de treinamento = mesma NR e mesma turma da escala (quando a escala é por turma)
+  ativos.forEach((i, k) => {
+    i.id = k; i.candSet = new Set(i.cands);
+    i.turmaEscala = i.grupo && escalaDados && escalaDados.porGrupo.has(keyGrupo(i.grupo)) ? keyGrupo(i.grupo).toUpperCase() : "";
+    i.ckey = i.nr + "§" + i.turmaEscala;
+  });
   const ocupado = new Map(); // matricula -> Set(dias)
   const isBusy = (it, d) => ocupado.get(it.matricula)?.has(d);
   const mark = (it, d, on) => { if (!ocupado.has(it.matricula)) ocupado.set(it.matricula, new Set()); on ? ocupado.get(it.matricula).add(d) : ocupado.get(it.matricula).delete(d); };
   const turmas = [];
-  const turmaKey = new Map(); // nr|dia -> turma
+  const turmaKey = new Map(); // nr§turmaEscala|dia -> turma
   const add = (t, it) => { t.membros.push(it); it.turma = t; mark(it, t.dia, true); };
   const remove = (t, it) => { t.membros = t.membros.filter((x) => x !== it); it.turma = null; mark(it, t.dia, false); };
 
@@ -718,17 +724,17 @@ function planejar(dados, cfg) {
     if (!livres.length) { u.motivo = "Todas as datas possíveis já estão ocupadas com outro treinamento"; continue; }
     // 1) turma existente com vaga
     let alvo = null;
-    for (const d of livres) { const t = turmaKey.get(u.nr + "|" + d); if (t && t.membros.length < cfg.capMax && (!alvo || t.membros.length > alvo.membros.length)) alvo = t; }
+    for (const d of livres) { const t = turmaKey.get(u.ckey + "|" + d); if (t && t.membros.length < cfg.capMax && (!alvo || t.membros.length > alvo.membros.length)) alvo = t; }
     if (alvo) { add(alvo, u); continue; }
     // 2) nova turma no dia que junta mais gente da mesma NR
     let best = null, bestN = -1;
     for (const d of livres) {
-      let n = 0; for (const o of fila) if (!o.turma && o.nr === u.nr && o.candSet.has(d) && !isBusy(o, d)) n++;
+      let n = 0; for (const o of fila) if (!o.turma && o.ckey === u.ckey && o.candSet.has(d) && !isBusy(o, d)) n++;
       if (n >= bestN) { best = d; bestN = n; } // empate: data mais perto do vencimento
     }
-    const t = { nr: u.nr, dia: best, membros: [] }; turmas.push(t); turmaKey.set(u.nr + "|" + best, t);
+    const t = { nr: u.nr, ckey: u.ckey, turmaEscala: u.turmaEscala, dia: best, membros: [] }; turmas.push(t); turmaKey.set(u.ckey + "|" + best, t);
     add(t, u);
-    for (const o of fila) { if (t.membros.length >= cfg.capMax) break; if (o !== u && !o.turma && o.nr === u.nr && o.candSet.has(best) && !isBusy(o, best)) add(t, o); }
+    for (const o of fila) { if (t.membros.length >= cfg.capMax) break; if (o !== u && !o.turma && o.ckey === u.ckey && o.candSet.has(best) && !isBusy(o, best)) add(t, o); }
   }
 
   // semanas do período
@@ -742,14 +748,14 @@ function planejar(dados, cfg) {
       let guard = 0;
       while (porSemana(w) < cfg.porSemana && guard++ < 20) {
         let melhor = null;
-        const nrs = [...new Set(ativos.map((i) => i.nr))];
+        const nrs = [...new Set(ativos.map((i) => i.ckey))];
         for (let d = Math.max(w, inicio); d <= Math.min(w + 4, fim); d++) {
           for (const nr of nrs) {
             if (turmaKey.has(nr + "|" + d) && turmaKey.get(nr + "|" + d).membros.length) continue;
             // simula quem pode mudar para (nr, d)
             const tamanho = new Map(turmas.map((t) => [t, t.membros.length]));
             const mov = [];
-            const cands = ativos.filter((i) => i.turma && i.nr === nr && i.candSet.has(d) && !isBusy(i, d))
+            const cands = ativos.filter((i) => i.turma && i.ckey === nr && i.candSet.has(d) && !isBusy(i, d))
               .sort((a, b) => tamanho.get(b.turma) - tamanho.get(a.turma));
             for (const i of cands) {
               if (mov.length >= cfg.capMax) break;
@@ -764,7 +770,7 @@ function planejar(dados, cfg) {
         }
         if (!melhor) break;
         let t = turmaKey.get(melhor.nr + "|" + melhor.d);
-        if (!t) { t = { nr: melhor.nr, dia: melhor.d, membros: [] }; turmas.push(t); turmaKey.set(melhor.nr + "|" + melhor.d, t); }
+        if (!t) { const m0 = melhor.mov[0]; t = { nr: m0.nr, ckey: melhor.nr, turmaEscala: m0.turmaEscala, dia: melhor.d, membros: [] }; turmas.push(t); turmaKey.set(melhor.nr + "|" + melhor.d, t); }
         for (const i of melhor.mov) { remove(i.turma, i); add(t, i); }
       }
     }
@@ -779,7 +785,7 @@ function planejar(dados, cfg) {
     for (const i of [...t.membros]) {
       let destino = null;
       for (const o of vivas()) {
-        if (o === t || o.nr !== t.nr || o.membros.length >= cfg.capMax || !i.candSet.has(o.dia) || isBusy(i, o.dia)) continue;
+        if (o === t || o.ckey !== t.ckey || o.membros.length >= cfg.capMax || !i.candSet.has(o.dia) || isBusy(i, o.dia)) continue;
         if (o.membros.length < t.membros.length && o.membros.length < cfg.capMin) continue;
         if (!destino || o.membros.length > destino.membros.length) destino = o;
       }
@@ -787,7 +793,7 @@ function planejar(dados, cfg) {
     }
     if (!t.membros.length || t.membros.length >= cfg.capMin) continue;
     // b) trazer gente de turmas que têm sobra (acima do mínimo) para completar esta
-    const doadores = ativos.filter((i) => i.turma && i.turma !== t && i.nr === t.nr && i.candSet.has(t.dia) && !isBusy(i, t.dia))
+    const doadores = ativos.filter((i) => i.turma && i.turma !== t && i.ckey === t.ckey && i.candSet.has(t.dia) && !isBusy(i, t.dia))
       .sort((a, b) => b.turma.membros.length - a.turma.membros.length);
     const plano = [], tam = new Map(vivas().map((o) => [o, o.membros.length]));
     for (const i of doadores) {
@@ -796,7 +802,7 @@ function planejar(dados, cfg) {
     }
     if (t.membros.length + plano.length >= cfg.capMin) { for (const i of plano) { remove(i.turma, i); add(t, i); } continue; }
     // c) não fechou o mínimo: desfaz a turma
-    for (const i of [...t.membros]) { remove(t, i); i.motivo = `Não há pelo menos ${cfg.capMin} pessoas da ${t.nr} com folga possível no mesmo dia`; }
+    for (const i of [...t.membros]) { remove(t, i); i.motivo = `Não há pelo menos ${cfg.capMin} pessoas da ${t.nr}${t.turmaEscala ? ` na turma ${t.turmaEscala} da escala` : ""} com folga possível no mesmo dia`; }
   }
 
   const finais = turmas.filter((t) => t.membros.length).sort((a, b) => a.dia - b.dia || a.nr.localeCompare(b.nr));
@@ -916,7 +922,7 @@ function gerar() {
     const body = ts.length ? ts.map((t) => `
       <details class="turma"><summary>
         <span class="date">${DOW[dow(t.dia)]} ${fmt(t.dia)}</span>
-        <span class="nr">${esc(t.codigo)}${t.titulo ? `<span class="titulo">${esc(t.titulo)}</span>` : ""}</span>
+        <span class="nr">${esc(t.codigo)}${t.turmaEscala ? ` <span class="pill neutral">turma ${esc(t.turmaEscala)} da escala</span>` : ""}${t.titulo ? `<span class="titulo">${esc(t.titulo)}</span>` : ""}</span>
         <span>${t.projetada ? `<span class="pill neutral" title="A escala carregada termina antes desta data; o dia foi calculado repetindo o ciclo">pela projeção da escala</span> ` : ""}${t.membros.length < cfg.capMin ? `<span class="pill warn">${t.membros.length} pessoa${t.membros.length === 1 ? "" : "s"} · abaixo do mínimo</span>` : `<span class="pill neutral">${t.membros.length} de ${cfg.capMax} vagas</span>`}</span>
       </summary><div class="members tablewrap"><table><thead><tr><th>Matrícula</th><th>Nome</th><th>Setor</th><th>Escala</th><th>Vencimento</th><th>Situação</th></tr></thead><tbody>
         ${t.membros.map((i) => `<tr><td>${esc(i.matricula)}</td><td>${esc(i.nome)}</td><td>${esc(i.setor)}</td><td>${esc(i.escala)}</td><td class="dt">${fmt(i.venc)}</td><td>${situacao(i)}</td></tr>`).join("")}
@@ -964,9 +970,9 @@ function exportar() {
   if (!resultado) return;
   const R = resultado, wb = XLSX.utils.book_new();
   const turmasRows = [];
-  R.turmas.forEach((t) => t.membros.forEach((i) => turmasRows.push({ Turma: t.codigo, Treinamento: t.titulo ? `${t.nr} – ${t.titulo}` : t.nr, Data: fmt(t.dia), "Dia da semana": DOW[dow(t.dia)], Matrícula: i.matricula, Nome: i.nome, Setor: i.setor, Função: i.funcao, Escala: i.escala, Vencimento: fmt(i.venc) })));
+  R.turmas.forEach((t) => t.membros.forEach((i) => turmasRows.push({ Turma: t.codigo, Treinamento: t.titulo ? `${t.nr} – ${t.titulo}` : t.nr, "Turma da escala": t.turmaEscala || "", Data: fmt(t.dia), "Dia da semana": DOW[dow(t.dia)], Matrícula: i.matricula, Nome: i.nome, Setor: i.setor, Função: i.funcao, Escala: i.escala, Vencimento: fmt(i.venc) })));
   XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(turmasRows.length ? turmasRows : [{ Turma: "Nenhuma turma" }]), "Turmas");
-  XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(R.turmas.map((t) => ({ Turma: t.codigo, Treinamento: t.titulo ? `${t.nr} – ${t.titulo}` : t.nr, Data: fmt(t.dia), "Dia da semana": DOW[dow(t.dia)], Participantes: t.membros.length, Observação: t.projetada ? "Data calculada pela projeção da escala (depois do fim da planilha)" : "" }))), "Resumo das turmas");
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(R.turmas.map((t) => ({ Turma: t.codigo, Treinamento: t.titulo ? `${t.nr} – ${t.titulo}` : t.nr, "Turma da escala": t.turmaEscala || "", Data: fmt(t.dia), "Dia da semana": DOW[dow(t.dia)], Participantes: t.membros.length, Observação: t.projetada ? "Data calculada pela projeção da escala (depois do fim da planilha)" : "" }))), "Resumo das turmas");
   XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(R.semanas.map((w) => { const n = R.turmas.filter((t) => monday(t.dia) === w).length; return { Semana: `${fmt(Math.max(w, R.inicio))} a ${fmt(Math.min(w + 4, R.fim))}`, Turmas: n, "Atende mínimo": n >= R.cfg.porSemana ? "Sim" : "Não" }; })), "Semanas");
   XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet([...R.itens].sort((a, b) => (a.venc ?? 1e9) - (b.venc ?? 1e9)).map((i) => ({ Matrícula: i.matricula, Nome: i.nome, Setor: i.setor, NR: i.nr, Treinamento: nomeTreinamento(i.nr), Vencimento: fmt(i.venc), Situação: i.status === "sem-data" ? "Sem data" : i.vencido ? "Vencido" : `Vence em ${i.diasAte} dias`, Escala: i.escala, Turma: i.turma ? i.turma.codigo : "", "Data da turma": i.turma ? fmt(i.turma.dia) : "", Motivo: i.turma ? "" : i.motivo }))), "A vencer");
   const pend = R.itens.filter((i) => !i.turma);

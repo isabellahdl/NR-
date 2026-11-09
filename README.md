@@ -88,4 +88,5 @@ Sem vencimento, ele é calculado pela data do último treinamento + validade da 
 - Quem vence primeiro é encaixado primeiro; cada turma é marcada no dia que junta mais gente da mesma NR (no empate, o mais perto do vencimento), respeitando o limite de vagas.
 - O programa tenta garantir **pelo menos 2 turmas por semana** (configurável), remanejando colaboradores sem deixar nenhuma turma abaixo do mínimo. Semanas em que não houve gente suficiente ficam sinalizadas.
 - Toda turma tem **no mínimo 3 e no máximo 12 pessoas** (configurável). Se não houver 3 pessoas da mesma NR com folga possível no mesmo dia, o colaborador aparece em "Sem turma" com esse motivo.
+- Cada turma de treinamento junta só pessoas do **mesmo treinamento (NR)** e da **mesma turma da escala** (A, B, C…).
 - Ninguém é colocado em dois treinamentos no mesmo dia.
