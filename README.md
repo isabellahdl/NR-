@@ -5,14 +5,15 @@ Programa para saber quais colaboradores precisam reciclar treinamentos de NR nos
 ## Como usar
 
 1. Abra o arquivo `planejador-nr.html` no navegador (Chrome, Edge ou Firefox). Precisa de internet só para carregar a biblioteca de planilhas.
-2. Clique em **Baixar modelo**, preencha com seus colaboradores (uma linha por colaborador e por NR) e salve.
-3. Clique em **Carregar planilha** e escolha o arquivo (.xlsx, .xls ou .csv).
-4. Ajuste o período, vagas por turma (padrão 12), mínimo por turma (padrão 3) e turmas por semana, se precisar.
-5. Clique em **Exportar resultado (Excel)** para baixar turmas, lista de quem vence e pendências.
+2. Clique em **Modelo de treinamentos**, preencha com seus colaboradores (uma linha por colaborador e por NR) e salve.
+3. Clique em **Modelo de escala** e preencha a escala do ano (veja abaixo). Ela fica num arquivo separado porque muda todo ano.
+4. Clique em **Carregar treinamentos** e depois em **Carregar escala** (.xlsx, .xls ou .csv). A ordem não importa.
+5. Ajuste o período, vagas por turma (padrão 12), mínimo por turma (padrão 3) e turmas por semana, se precisar.
+6. Clique em **Exportar resultado (Excel)** para baixar turmas, lista de quem vence e pendências.
 
 Os dados ficam só no seu computador; nada é enviado para a internet.
 
-## Colunas da planilha
+## Planilha de treinamentos
 
 | Coluna | Obrigatória | Exemplo |
 |---|---|---|
@@ -22,10 +23,22 @@ Os dados ficam só no seu computador; nada é enviado para a internet.
 | NR | sim | NR-10, NR 35, NR-33 |
 | Data Último Treinamento | se não tiver Vencimento | 15/01/2025 |
 | Vencimento | se não tiver a data do último | 15/01/2027 |
-| Escala | sim* | 14x14, 7x7, 14x7 (dias trabalhados x dias de folga) |
-| Início da Escala | sim* | data que foi o 1º dia de trabalho de um ciclo |
+| Grupo | não | A, B, C… (turma/letra da escala, se a planilha de escala for por grupo) |
+| Escala | não* | 14x14, 7x7, 14x7 (dias trabalhados x dias de folga) |
+| Início da Escala | não* | data que foi o 1º dia de trabalho de um ciclo |
 
-\* Pode ser trocada pela aba **Folgas** (Matrícula, Data), listando cada dia de folga, para escalas irregulares.
+\* Só precisa se você não carregar a planilha de escala. Também dá para usar uma aba **Folgas** (Matrícula, Data).
+
+## Planilha de escala (separada, atualizada todo ano)
+
+Tem prioridade sobre as colunas de escala da planilha de treinamentos. Aceita qualquer um destes formatos (pode misturar em abas diferentes):
+
+- **Por colaborador:** Matrícula, Escala, Início da Escala.
+- **Por grupo:** Grupo (ou Turma/Letra), Escala, Início da Escala. A planilha de treinamentos precisa da coluna Grupo.
+- **Calendário:** Matrícula (ou Grupo) nas linhas, uma coluna por data e **F** (ou Folga/DSR) nos dias de folga.
+- **Lista de folgas:** Matrícula e Data, uma linha por dia de folga.
+
+Quem não for encontrado na escala aparece num aviso e na aba "Sem turma". Matrículas com zeros à esquerda (0123 e 123) são consideradas iguais.
 Aba opcional **Feriados** (Data, Descrição) para feriados locais. Os feriados nacionais já são considerados.
 
 Sem vencimento, ele é calculado pela data do último treinamento + validade da NR, que pode ser editada na tela
