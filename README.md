@@ -13,7 +13,7 @@ Programa para saber quais colaboradores precisam reciclar treinamentos de NR nos
 4. Ajuste o período, as vagas (padrão 12), o mínimo por turma (padrão 3) e as turmas por semana, se precisar.
 5. Clique em **Exportar resultado (Excel)** para baixar as turmas, a lista de quem vence e as pendências.
 
-Na tela, a tabela **Treinamentos: nome, código, horário, local e vagas** define como cada treinamento aparece na programação e o limite de vagas de cada um (ex.: prático com 4 vagas). Esses dados ficam guardados no navegador. Se a planilha de treinamentos tiver colunas Código, Horário ou Local, elas já vêm preenchidas.
+Se a planilha de treinamentos tiver as colunas **Código**, **Horário** e **Local**, elas vão para a programação exportada.
 
 A exportação começa pela aba **Programação**, no mesmo formato da planilha feita à mão: Data, Dia, Horário, Local, Código, Treinamento, Matrícula, Nome, Negócio (KR/KE), Convocado e Realizado, com as células de cada turma mescladas e uma linha em branco entre as turmas.
 

@@ -193,11 +193,6 @@ details.cfg summary { cursor: pointer; font-weight: 600; }
       <label class="check"><input type="checkbox" id="feriadosNac"> Pular feriados nacionais</label>
       <button type="button" class="primary" id="btnGerar">Montar turmas</button>
     </div>
-    <details class="cfg" style="margin-top:14px" open>
-      <summary>Treinamentos: nome, código, horário, local e vagas</summary>
-      <div class="tablewrap" style="margin-top:10px"><table id="tblTreinos"></table></div>
-      <p class="slot-d" style="margin-top:6px">Esses dados vão para a programação exportada. Ficam guardados neste navegador. Vagas em branco usam o valor de "Vagas por turma".</p>
-    </details>
     <details class="cfg" style="margin-top:14px">
       <summary>Validade de cada NR (usada quando a planilha não tem a data de vencimento)</summary>
       <div class="cfg-grid" id="validades"></div>
@@ -355,22 +350,17 @@ const NR_NOMES = {
   "NR-35": "Trabalho em Altura", "NR-36": "Abate e Processamento de Carnes", "NR-37": "Plataformas de Petróleo", "NR-38": "Limpeza Urbana",
 };
 const nomeTreinamento = (nr) => NR_NOMES[baseNR(nr)] || "";
-// código, horário, local e vagas de cada treinamento (editáveis na tela; lembrados neste navegador)
-let treinosSalvos = {};
-try { treinosSalvos = JSON.parse(localStorage.getItem("nr-treinos") || "{}") || {}; } catch (e) { treinosSalvos = {}; }
-function salvarTreinos() { try { localStorage.setItem("nr-treinos", JSON.stringify(treinosSalvos)); } catch (e) { /* sem armazenamento: vale só nesta sessão */ } }
+// nome, código, horário e local de cada treinamento vêm da planilha de treinamentos (quando ela tem essas colunas)
 function infoTreino(nr) {
   const linhas = dados.rows.filter((r) => r.nr === nr);
   const primeiro = (k) => (linhas.find((r) => r[k]) || {})[k] || "";
   const bruto = primeiro("nomeTreino");
   const nomePlanilha = bruto && normNR(bruto) !== baseNR(nr) ? bruto : "";
-  const s = treinosSalvos[nr] || {};
   return {
-    nome: s.nome || nomePlanilha || (nomeTreinamento(nr) ? `${baseNR(nr)} – ${nomeTreinamento(nr)}` : nr),
-    codigo: s.codigo ?? primeiro("codTreino"),
-    horario: s.horario ?? (primeiro("horario") || "09 às 11"),
-    local: s.local ?? primeiro("local"),
-    vagas: +s.vagas || 0,
+    nome: nomePlanilha || (nomeTreinamento(nr) ? `${baseNR(nr)} – ${nomeTreinamento(nr)}` : nr),
+    codigo: primeiro("codTreino"),
+    horario: primeiro("horario"),
+    local: primeiro("local"),
   };
 }
 
@@ -737,7 +727,7 @@ function planejar(dados, cfg) {
 
   const ativos = itens.filter((i) => i.cands.length);
   const capCache = new Map();
-  const cap = (nr) => { if (!capCache.has(nr)) capCache.set(nr, infoTreino(nr).vagas || cfg.capMax); return capCache.get(nr); };
+  const cap = (nr) => { if (!capCache.has(nr)) capCache.set(nr, cfg.capMax); return capCache.get(nr); };
   // mesma turma de treinamento = mesma NR e mesma turma da escala (quando a escala é por turma)
   ativos.forEach((i, k) => {
     i.id = k; i.candSet = new Set(i.cands);
@@ -890,16 +880,6 @@ function toast(msg) { const t = $("toast"); t.textContent = msg; t.hidden = fals
 function lerCfg() {
   const num = (id, def) => { const v = parseInt($(id).value, 10); return isFinite(v) ? v : def; };
   return { inicio: parseDate($("inicio").value) ?? todayDay(), meses: Math.max(1, num("meses", 3)), antecedencia: Math.max(0, num("antecedencia", 90)), capMax: Math.max(1, num("capMax", 12)), capMin: Math.min(Math.max(1, num("capMin", 3)), Math.max(1, num("capMax", 12))), porSemana: Math.max(0, num("porSemana", 2)), feriadosNac: $("feriadosNac").checked };
-}
-function renderTreinos() {
-  const nrs = [...new Set(dados.rows.map((r) => r.nr))].sort();
-  const inp = (nr, k, v, ph, tipo = "text", w = "") => `<input type="${tipo}" ${tipo === "number" ? 'min="1" max="200"' : ""} data-nr="${esc(nr)}" data-k="${k}" value="${esc(v)}" placeholder="${esc(ph)}" aria-label="${k}" style="font:inherit;color:var(--ink);background:var(--bg);border:1px solid var(--line);border-radius:6px;padding:5px 7px;width:${w || "100%"}">`;
-  $("tblTreinos").innerHTML = `<thead><tr><th>Treinamento</th><th>Código</th><th>Horário</th><th>Local</th><th>Vagas</th></tr></thead><tbody>` +
-    nrs.map((nr) => { const i = infoTreino(nr); return `<tr><td style="min-width:16rem">${inp(nr, "nome", i.nome, nr)}</td><td>${inp(nr, "codigo", i.codigo, "ex.: 50593294", "text", "8.5rem")}</td><td>${inp(nr, "horario", i.horario, "ex.: 09 às 11", "text", "7rem")}</td><td style="min-width:12rem">${inp(nr, "local", i.local, "ex.: Oficina Escola PA")}</td><td>${inp(nr, "vagas", i.vagas || "", String(lerCfg().capMax), "number", "4.5rem")}</td></tr>`; }).join("") + `</tbody>`;
-  $("tblTreinos").querySelectorAll("input").forEach((el) => el.addEventListener("change", () => {
-    const nr = el.dataset.nr; treinosSalvos[nr] = { ...(treinosSalvos[nr] || {}), [el.dataset.k]: el.value.trim() };
-    salvarTreinos(); gerar();
-  }));
 }
 function renderValidades() {
   const nrs = new Set([...Object.keys(validades), ...dados.rows.map((r) => baseNR(r.nr))]);
@@ -1138,7 +1118,7 @@ $("arquivo").addEventListener("change", async (ev) => {
   try {
     const d = parseWorkbook(await lerArquivo(f));
     if (!d.rows.length) { $("avisos").innerHTML = `<div class="msg">${esc(d.avisos[0] || "Nenhuma linha válida encontrada na planilha.")}</div>`; return; }
-    dados = d; fonteNome = f.name; renderValidades(); renderTreinos(); gerar(); toast(`${d.rows.length} linhas carregadas`);
+    dados = d; fonteNome = f.name; renderValidades(); gerar(); toast(`${d.rows.length} linhas carregadas`);
   } catch (e) { $("avisos").innerHTML = `<div class="msg">${esc(e.message || "Não consegui ler o arquivo.")}</div>`; }
   ev.target.value = "";
 });
@@ -1154,7 +1134,6 @@ document.querySelectorAll(".tabs button").forEach((b) => b.addEventListener("cli
 }));
 { const [y, m, d] = ymd(todayDay()); $("inicio").value = `${y}-${pad(m)}-${pad(d)}`; }
 renderValidades();
-renderTreinos();
 gerar();
 </script>
 </body>
