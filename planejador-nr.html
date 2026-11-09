@@ -106,12 +106,12 @@ button:hover, .filebtn:hover { filter: brightness(1.06); }
 .pill.neutral { background: var(--bg); color: var(--muted); border: 1px solid var(--line); }
 .turma { border-top: 1px solid var(--line); }
 .turma:first-of-type { border-top: none; }
-.turma summary { list-style: none; cursor: pointer; display: grid; grid-template-columns: 4rem 9.5rem 1fr auto; gap: 10px; align-items: center; padding: 10px 14px; }
+.turma summary { list-style: none; cursor: pointer; display: grid; grid-template-columns: 9.5rem 1fr auto; gap: 10px; align-items: center; padding: 10px 14px; }
 .turma summary::-webkit-details-marker { display: none; }
 .turma summary:hover { background: var(--bg); }
-.turma .code { font-family: var(--font-display); font-weight: 700; color: var(--muted); }
 .turma .date { font-weight: 600; font-variant-numeric: tabular-nums; }
-.turma .nr { font-family: var(--font-display); font-weight: 700; }
+.turma .nr { font-family: var(--font-display); font-weight: 700; min-width: 0; }
+.turma .titulo { display: block; font-family: var(--font-body); font-weight: 400; font-size: .85rem; color: var(--muted); }
 .turma .members { padding: 0 14px 12px; }
 .empty-week { padding: 12px 14px; color: var(--muted); font-size: .9rem; }
 .tablewrap { overflow-x: auto; background: var(--surface); border: 1px solid var(--line); border-radius: 10px; }
@@ -132,8 +132,8 @@ details.cfg summary { cursor: pointer; font-weight: 600; }
 .msg.info { background: var(--warn-bg); color: var(--warn); }
 .toast { position: fixed; left: 50%; transform: translateX(-50%); bottom: calc(20px + env(safe-area-inset-bottom, 0px)); background: var(--ink); color: var(--bg); padding: 10px 16px; border-radius: 8px; font-size: .9rem; z-index: 20; }
 @media (max-width: 640px) {
-  .turma summary { grid-template-columns: 3.5rem 1fr auto; }
-  .turma summary .nr { grid-column: 2; grid-row: 2; }
+  .turma summary { grid-template-columns: 1fr auto; }
+  .turma summary .nr { grid-column: 1 / -1; grid-row: 2; }
   h1 { font-size: 1.5rem; }
 }
 @media (prefers-reduced-motion: reduce) { * { transition: none !important; animation: none !important; } }
@@ -338,6 +338,17 @@ function normNR(v) {
   return `NR-${pad(m[1])}${rest ? " " + rest.toUpperCase() : ""}`;
 }
 const baseNR = (nr) => (nr.match(/^NR-\d+/) || [nr])[0];
+const NR_NOMES = {
+  "NR-01": "Disposições Gerais e Gerenciamento de Riscos Ocupacionais", "NR-05": "CIPA", "NR-06": "Equipamento de Proteção Individual (EPI)",
+  "NR-07": "PCMSO", "NR-10": "Segurança em Instalações e Serviços em Eletricidade", "NR-11": "Transporte, Movimentação, Armazenagem e Manuseio de Materiais",
+  "NR-12": "Segurança no Trabalho em Máquinas e Equipamentos", "NR-13": "Caldeiras, Vasos de Pressão, Tubulações e Tanques", "NR-17": "Ergonomia",
+  "NR-18": "Segurança e Saúde no Trabalho na Indústria da Construção", "NR-20": "Segurança e Saúde no Trabalho com Inflamáveis e Combustíveis",
+  "NR-22": "Segurança e Saúde Ocupacional na Mineração", "NR-23": "Proteção Contra Incêndios", "NR-26": "Sinalização de Segurança",
+  "NR-31": "Segurança e Saúde no Trabalho na Agricultura", "NR-32": "Segurança e Saúde no Trabalho em Serviços de Saúde",
+  "NR-33": "Segurança e Saúde nos Trabalhos em Espaços Confinados", "NR-34": "Trabalho na Indústria da Construção e Reparação Naval",
+  "NR-35": "Trabalho em Altura", "NR-36": "Abate e Processamento de Carnes", "NR-37": "Plataformas de Petróleo", "NR-38": "Limpeza Urbana",
+};
+const nomeTreinamento = (nr) => NR_NOMES[baseNR(nr)] || "";
 
 // ---------- leitura da planilha ----------
 const norm = (s) => String(s).normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase().replace(/[^a-z0-9]/g, "");
@@ -789,7 +800,9 @@ function planejar(dados, cfg) {
   }
 
   const finais = turmas.filter((t) => t.membros.length).sort((a, b) => a.dia - b.dia || a.nr.localeCompare(b.nr));
-  finais.forEach((t, k) => { t.projetada = t.membros.some((i) => i.projApos != null && t.dia > i.projApos); t.codigo = "T" + pad(k + 1); t.membros.sort((a, b) => a.venc - b.venc || a.nome.localeCompare(b.nome)); });
+  const seqNR = new Map();
+  finais.forEach((t) => { const n = (seqNR.get(t.nr) || 0) + 1; seqNR.set(t.nr, n); t.codigo = `${t.nr} – T${pad(n)}`; t.titulo = nomeTreinamento(t.nr); });
+  finais.forEach((t, k) => { t.projetada = t.membros.some((i) => i.projApos != null && t.dia > i.projApos); t.membros.sort((a, b) => a.venc - b.venc || a.nome.localeCompare(b.nome)); });
   itens.forEach((i) => { if (i.turma) i.motivo = ""; else if (!i.motivo && i.status !== "sem-data") i.motivo = "Não foi possível encaixar"; });
   return { inicio, fim, itens, turmas: finais, semanas, feriados, cfg };
 }
@@ -902,9 +915,8 @@ function gerar() {
     const fer = [...R.feriados.entries()].filter(([d]) => d >= w && d <= w + 4).map(([d, n]) => `${fmtShort(d)} ${esc(n)}`).join(", ");
     const body = ts.length ? ts.map((t) => `
       <details class="turma"><summary>
-        <span class="code">${t.codigo}</span>
         <span class="date">${DOW[dow(t.dia)]} ${fmt(t.dia)}</span>
-        <span class="nr">${esc(t.nr)}</span>
+        <span class="nr">${esc(t.codigo)}${t.titulo ? `<span class="titulo">${esc(t.titulo)}</span>` : ""}</span>
         <span>${t.projetada ? `<span class="pill neutral" title="A escala carregada termina antes desta data; o dia foi calculado repetindo o ciclo">pela projeção da escala</span> ` : ""}${t.membros.length < cfg.capMin ? `<span class="pill warn">${t.membros.length} pessoa${t.membros.length === 1 ? "" : "s"} · abaixo do mínimo</span>` : `<span class="pill neutral">${t.membros.length} de ${cfg.capMax} vagas</span>`}</span>
       </summary><div class="members tablewrap"><table><thead><tr><th>Matrícula</th><th>Nome</th><th>Setor</th><th>Escala</th><th>Vencimento</th><th>Situação</th></tr></thead><tbody>
         ${t.membros.map((i) => `<tr><td>${esc(i.matricula)}</td><td>${esc(i.nome)}</td><td>${esc(i.setor)}</td><td>${esc(i.escala)}</td><td class="dt">${fmt(i.venc)}</td><td>${situacao(i)}</td></tr>`).join("")}
@@ -930,7 +942,7 @@ function renderVenc() {
   for (const i of lista) {
     const mes = i.venc == null ? "Sem data de vencimento" : i.vencido ? "Já vencidos" : (() => { const [y, m] = ymd(i.venc); return `${MESES[m - 1]} de ${y}`; })();
     if (mes !== mesAtual) { mesAtual = mes; html += `<tr class="month"><td colspan="9">${esc(mes.charAt(0).toUpperCase() + mes.slice(1))}</td></tr>`; }
-    html += `<tr><td>${esc(i.matricula)}</td><td>${esc(i.nome)}</td><td>${esc(i.setor)}</td><td>${esc(i.nr)}</td><td class="dt">${fmt(i.venc)}</td><td>${situacao(i)}</td><td>${esc(i.escala)}</td><td class="dt">${i.turma ? `${i.turma.codigo} · ${DOW[dow(i.turma.dia)]} ${fmt(i.turma.dia)}` : `<span class="pill warn">sem turma</span>`}</td></tr>`;
+    html += `<tr><td>${esc(i.matricula)}</td><td>${esc(i.nome)}</td><td>${esc(i.setor)}</td><td>${esc(i.nr)}</td><td class="dt">${fmt(i.venc)}</td><td>${situacao(i)}</td><td>${esc(i.escala)}</td><td class="dt">${i.turma ? `${esc(i.turma.codigo)} · ${DOW[dow(i.turma.dia)]} ${fmt(i.turma.dia)}` : `<span class="pill warn">sem turma</span>`}</td></tr>`;
   }
   $("tblVenc").innerHTML = `<thead><tr><th>Matrícula</th><th>Nome</th><th>Setor</th><th>NR</th><th>Vencimento</th><th>Situação</th><th>Escala</th><th>Turma</th></tr></thead><tbody>${html || `<tr><td colspan="8">Nenhum treinamento encontrado.</td></tr>`}</tbody>`;
 }
@@ -952,11 +964,11 @@ function exportar() {
   if (!resultado) return;
   const R = resultado, wb = XLSX.utils.book_new();
   const turmasRows = [];
-  R.turmas.forEach((t) => t.membros.forEach((i) => turmasRows.push({ Turma: t.codigo, Data: fmt(t.dia), "Dia da semana": DOW[dow(t.dia)], NR: t.nr, Matrícula: i.matricula, Nome: i.nome, Setor: i.setor, Função: i.funcao, Escala: i.escala, Vencimento: fmt(i.venc) })));
+  R.turmas.forEach((t) => t.membros.forEach((i) => turmasRows.push({ Turma: t.codigo, Treinamento: t.titulo ? `${t.nr} – ${t.titulo}` : t.nr, Data: fmt(t.dia), "Dia da semana": DOW[dow(t.dia)], Matrícula: i.matricula, Nome: i.nome, Setor: i.setor, Função: i.funcao, Escala: i.escala, Vencimento: fmt(i.venc) })));
   XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(turmasRows.length ? turmasRows : [{ Turma: "Nenhuma turma" }]), "Turmas");
-  XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(R.turmas.map((t) => ({ Turma: t.codigo, Data: fmt(t.dia), "Dia da semana": DOW[dow(t.dia)], NR: t.nr, Participantes: t.membros.length, Observação: t.projetada ? "Data calculada pela projeção da escala (depois do fim da planilha)" : "" }))), "Resumo das turmas");
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(R.turmas.map((t) => ({ Turma: t.codigo, Treinamento: t.titulo ? `${t.nr} – ${t.titulo}` : t.nr, Data: fmt(t.dia), "Dia da semana": DOW[dow(t.dia)], Participantes: t.membros.length, Observação: t.projetada ? "Data calculada pela projeção da escala (depois do fim da planilha)" : "" }))), "Resumo das turmas");
   XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(R.semanas.map((w) => { const n = R.turmas.filter((t) => monday(t.dia) === w).length; return { Semana: `${fmt(Math.max(w, R.inicio))} a ${fmt(Math.min(w + 4, R.fim))}`, Turmas: n, "Atende mínimo": n >= R.cfg.porSemana ? "Sim" : "Não" }; })), "Semanas");
-  XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet([...R.itens].sort((a, b) => (a.venc ?? 1e9) - (b.venc ?? 1e9)).map((i) => ({ Matrícula: i.matricula, Nome: i.nome, Setor: i.setor, NR: i.nr, Vencimento: fmt(i.venc), Situação: i.status === "sem-data" ? "Sem data" : i.vencido ? "Vencido" : `Vence em ${i.diasAte} dias`, Escala: i.escala, Turma: i.turma ? i.turma.codigo : "", "Data da turma": i.turma ? fmt(i.turma.dia) : "", Motivo: i.turma ? "" : i.motivo }))), "A vencer");
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet([...R.itens].sort((a, b) => (a.venc ?? 1e9) - (b.venc ?? 1e9)).map((i) => ({ Matrícula: i.matricula, Nome: i.nome, Setor: i.setor, NR: i.nr, Treinamento: nomeTreinamento(i.nr), Vencimento: fmt(i.venc), Situação: i.status === "sem-data" ? "Sem data" : i.vencido ? "Vencido" : `Vence em ${i.diasAte} dias`, Escala: i.escala, Turma: i.turma ? i.turma.codigo : "", "Data da turma": i.turma ? fmt(i.turma.dia) : "", Motivo: i.turma ? "" : i.motivo }))), "A vencer");
   const pend = R.itens.filter((i) => !i.turma);
   XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(pend.length ? pend.map((i) => ({ Matrícula: i.matricula, Nome: i.nome, NR: i.nr, Vencimento: fmt(i.venc), Escala: i.escala, Motivo: i.motivo })) : [{ Matrícula: "Nenhuma pendência" }]), "Sem turma");
   salvar(wb, `turmas-nr-${fmt(R.inicio).replace(/\//g, "-")}.xlsx`);
