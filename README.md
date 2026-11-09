@@ -33,7 +33,18 @@ Os dados ficam só no seu computador; nada é enviado para a internet.
 
 Tem prioridade sobre as colunas de escala da planilha de treinamentos.
 
-### Folga por turma (o formato mais comum)
+### Escala de revezamento (formato usado hoje)
+
+A planilha "Escala de Revezamento" (uma aba por ano, blocos por mês com as colunas **Dias**, **Turnos 1, 2, 3** e duas colunas **F** com as turmas de folga de cada dia) é lida do jeito que está:
+
+- as turmas que aparecem nas colunas **F** são as que estão de folga naquele dia;
+- dá para ter várias abas (2024, 2025, 2026…) no mesmo arquivo; um bloco de JANEIRO no fim do segundo semestre conta como janeiro do ano seguinte;
+- a lista de **Feriados** da própria planilha também é usada;
+- quando sair a escala do ano seguinte, basta incluir a nova aba (ou carregar o novo arquivo).
+
+A planilha de treinamentos precisa da coluna **Turma** (A, B, C, D, E ou "Turma A"…) de cada colaborador.
+
+### Folga por turma (lista)
 
 Uma linha por dia, com a data e a turma (ou turmas) de folga:
 

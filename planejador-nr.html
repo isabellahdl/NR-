@@ -225,6 +225,7 @@ details.cfg summary { cursor: pointer; font-weight: 600; }
       <h2>Planilha de escala (separada)</h2>
       <p>Como a escala muda todo ano, ela pode ficar num arquivo próprio: clique em <b>Carregar escala</b>. Ela tem prioridade sobre as colunas de escala da planilha de treinamentos. Formatos aceitos (veja <b>Modelo de escala</b>):</p>
       <ul>
+        <li><b>Escala de revezamento</b> (uma aba por ano, blocos por mês com as colunas Dias, Turnos 1/2/3 e duas colunas <b>F</b> com as turmas de folga): é lida direto, sem precisar mudar nada. Os feriados listados na própria escala também são considerados.</li>
         <li><b>Folga por turma</b>: uma linha por dia com a <b>Data</b> e a <b>Turma de folga</b> (ex.: 08/11/2026 | D; mais de uma turma: "A e D"). Cada colaborador é ligado à sua turma pela coluna <b>Turma</b> da planilha de treinamentos, ou por uma aba Matrícula + Turma na planilha de escala. Também vale um calendário Data | A | B | C… com F nos dias de folga.</li>
         <li><b>Por colaborador</b>: Matrícula, Escala (ex.: 6x4) e <b>Início da Folga</b> (um 1º dia de folga). Se todos seguem a mesma escala, a coluna Escala pode ficar de fora: vale a <b>Escala padrão</b> da tela.</li>
         <li><b>Escala mensal</b> (para quem não tem turno fixo): uma aba por mês com o mês no nome (ex.: Janeiro 2027), Matrícula/Nome nas linhas, dias 1 a 31 nas colunas e <b>F</b> nos dias de folga. O programa lê exatamente os dias marcados.</li>
@@ -385,11 +386,12 @@ const separaGrupos = (v) => String(v ?? "").split(/\s*(?:[,;\/+&|]|\s+e\s+)\s*/)
 const FOLGA = new Set(["f", "fo", "fg", "fol", "folga", "off", "dsr", "descanso", "d", "r", "repouso"]);
 const ehFolga = (v) => FOLGA.has(norm(v));
 function parseEscala(wb) {
-  const out = { porMat: new Map(), porGrupo: new Map(), porNome: new Map(), membros: new Map(), avisos: [], formatos: new Set() };
+  const out = { porMat: new Map(), porGrupo: new Map(), porNome: new Map(), membros: new Map(), feriados: [], avisos: [], formatos: new Set() };
   const addFolga = (mapa, k, d) => { if (!mapa.has(k)) mapa.set(k, { folgas: new Set() }); const e = mapa.get(k); if (!e.folgas) e.folgas = new Set(); e.folgas.add(d); };
   for (const name of wb.SheetNames) {
     if (/instru/i.test(name)) continue;
-    const aoa = XLSX.utils.sheet_to_json(wb.Sheets[name], { header: 1, defval: "", raw: true });
+    const aoa = XLSX.utils.sheet_to_json(wb.Sheets[name], { header: 1, defval: "", raw: true, blankrows: true });
+    if (lerRevezamento(aoa, name, out)) continue;
     // linha de cabeçalho: a primeira (entre as 15 primeiras) que tem Matrícula, Grupo ou Nome
     let hi = -1;
     for (let k = 0; k < Math.min(15, aoa.length); k++) { const m = mapHeaders(aoa[k].map((c) => String(c ?? ""))); if (m.matricula || m.grupo || m.nome) { hi = k; break; } }
@@ -469,6 +471,65 @@ function parseEscala(wb) {
   return out;
 }
 
+// Escala de revezamento: blocos por mês (JANEIRO, FEVEREIRO...), linha "Dias | 1 | 2 | 3 | F | F",
+// e em cada dia as turmas por turno e as turmas de folga nas colunas "F".
+const MESES_UP = ["JANEIRO", "FEVEREIRO", "MARCO", "ABRIL", "MAIO", "JUNHO", "JULHO", "AGOSTO", "SETEMBRO", "OUTUBRO", "NOVEMBRO", "DEZEMBRO"];
+const mesDe = (v) => MESES_UP.indexOf(norm(v).toUpperCase()) + 1;
+function lerRevezamento(aoa, name, out) {
+  let achou = false;
+  const anoTexto = (linhas) => { for (const r of linhas) for (const c of r) { const m = String(c).match(/\b(20\d{2})\b/); if (m && /ano/i.test(String(c))) return +m[1]; } return null; };
+  const anoAba = (String(name).match(/\b(20\d{2})\b/) || [])[1];
+  let inicioSecao = 0;
+  const diasLidos = [], turmasLidas = new Set();
+  for (let hr = 0; hr < aoa.length; hr++) {
+    const meses = [];
+    aoa[hr].forEach((c, i) => { const m = typeof c === "string" ? mesDe(c) : 0; if (m) meses.push([i, m]); });
+    if (meses.length < 2) continue;
+    // linha "Dias" logo abaixo dos meses
+    let dr = -1;
+    for (let k = hr + 1; k <= hr + 4 && k < aoa.length; k++) if (aoa[k].some((c) => norm(c) === "dias" || norm(c) === "dia")) { dr = k; break; }
+    if (dr < 0) continue;
+    let ano = anoTexto(aoa.slice(inicioSecao, hr + 1)) || (anoAba ? +anoAba : null);
+    if (!ano) { const ma = mesAno(MESES_UP[meses[0][1] - 1]); ano = ma ? ma[0] : ymd(todayDay())[0]; }
+    let anterior = 0;
+    meses.forEach(([col, m], idx) => {
+      if (m < anterior) ano++; // ex.: segundo semestre que termina com JANEIRO do ano seguinte
+      anterior = m;
+      const fim = idx + 1 < meses.length ? meses[idx + 1][0] : col + 8;
+      const colsF = [];
+      for (let i = col; i < fim; i++) if (norm(aoa[dr][i]) === "f" || norm(aoa[dr][i]) === "folga") colsF.push(i);
+      if (!colsF.length) return;
+      const ult = new Date(Date.UTC(ano, m, 0)).getUTCDate();
+      for (let r = dr + 1; r < Math.min(aoa.length, dr + 40); r++) {
+        const row = aoa[r] || [];
+        const diaCel = [row[col], row[col + 1], row[col + 2]].find((v) => /^\d{1,2}$/.test(String(v).trim()));
+        if (diaCel == null) { if (r > dr + 31) break; continue; }
+        const dia = +String(diaCel).trim(); if (dia < 1 || dia > ult) continue;
+        const d = toDay(ano, m, dia);
+        diasLidos.push(d);
+        for (const g of colsF.flatMap((i) => separaGrupos(row[i]))) {
+          const k = keyGrupo(g); if (!k) continue;
+          if (!out.porGrupo.has(k)) out.porGrupo.set(k, { folgas: new Set(), dias: [] });
+          out.porGrupo.get(k).folgas.add(d); turmasLidas.add(k);
+        }
+        achou = true;
+      }
+    });
+    inicioSecao = dr + 1;
+  }
+  // lista de feriados na própria escala (célula "Feriados" e datas ao lado/abaixo)
+  aoa.forEach((r, ri) => r.forEach((c, ci) => {
+    if (norm(c) !== "feriados" && norm(c) !== "feriado") return;
+    for (let k = ri; k < Math.min(aoa.length, ri + 60); k++) for (const cc of [ci, ci + 1]) {
+      const v = aoa[k][cc]; const d = typeof v === "number" && v > 30000 && v < 80000 ? Math.floor(v) - 25569 : /^\d{1,2}\/\d{1,2}\/\d{2,4}$/.test(String(v).trim()) ? parseDate(v) : null;
+      if (d != null) out.feriados.push([d, "Feriado (escala)"]);
+    }
+  }));
+  for (const k of turmasLidas) out.porGrupo.get(k).dias.push(...diasLidos); // período coberto pela escala
+  if (achou) out.formatos.add("escala de revezamento por turma");
+  return achou;
+}
+
 const MES_NOMES = ["jan", "fev", "mar", "abr", "mai", "jun", "jul", "ago", "set", "out", "nov", "dez"];
 function mesAno(txt) {
   const t = String(txt).normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
@@ -492,7 +553,8 @@ function folgaFn(row, folgasExplicitas, esc = escalaDados) {
     if (em) return em.folgas ? deSet(em, "calendário da escala") : deCiclo(em, "planilha de escala");
     const grupo = row.grupo || esc.membros.get(keyMat(row.matricula)) || "";
     const eg = grupo ? esc.porGrupo.get(keyGrupo(grupo)) : null;
-    if (eg) return eg.folgas ? deSet(eg, `turma ${grupo}`) : deCiclo(eg, `turma ${grupo}`);
+    const rot = `turma ${keyGrupo(grupo).toUpperCase()}`;
+    if (eg) return eg.folgas ? deSet(eg, rot) : deCiclo(eg, rot);
     if (grupo && esc.porGrupo.size) return { erro: `A turma ${grupo} não aparece na escala de folgas` };
     const en = row.nome ? esc.porNome.get(norm(row.nome)) : null;
     if (en) return en.folgas ? deSet(en, "calendário da escala") : deCiclo(en, "planilha de escala");
@@ -523,6 +585,7 @@ function planejar(dados, cfg) {
   const feriados = new Map();
   if (cfg.feriadosNac) { const [y0] = ymd(inicio), [y1] = ymd(fim); for (let y = y0; y <= y1; y++) nationalHolidays(y).forEach(([d, n]) => feriados.set(d, n)); }
   dados.feriados.forEach(([d, n]) => feriados.set(d, n));
+  if (escalaDados) escalaDados.feriados.forEach(([d, n]) => { if (!feriados.has(d)) feriados.set(d, n); });
   const util = (d) => { const w = dow(d); return w >= 1 && w <= 5 && !feriados.has(d); };
 
   const itens = [];
