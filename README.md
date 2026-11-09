@@ -7,7 +7,7 @@ Programa para saber quais colaboradores precisam reciclar treinamentos de NR nos
 1. Abra o arquivo `planejador-nr.html` no navegador (Chrome, Edge ou Firefox). Precisa de internet só para carregar a biblioteca de planilhas.
 2. Clique em **Baixar modelo**, preencha com seus colaboradores (uma linha por colaborador e por NR) e salve.
 3. Clique em **Carregar planilha** e escolha o arquivo (.xlsx, .xls ou .csv).
-4. Ajuste o período, vagas por turma, mínimo por turma e turmas por semana, se precisar.
+4. Ajuste o período, vagas por turma (padrão 12), mínimo por turma (padrão 3) e turmas por semana, se precisar.
 5. Clique em **Exportar resultado (Excel)** para baixar turmas, lista de quem vence e pendências.
 
 Os dados ficam só no seu computador; nada é enviado para a internet.
@@ -39,4 +39,5 @@ Sem vencimento, ele é calculado pela data do último treinamento + validade da 
 - A data fica dentro da janela de antecedência (padrão 90 dias) e antes do vencimento. Vencidos podem ir em qualquer data, com prioridade.
 - Quem vence primeiro é encaixado primeiro; cada turma é marcada no dia que junta mais gente da mesma NR (no empate, o mais perto do vencimento), respeitando o limite de vagas.
 - O programa tenta garantir **pelo menos 2 turmas por semana** (configurável), remanejando colaboradores sem deixar nenhuma turma abaixo do mínimo. Semanas em que não houve gente suficiente ficam sinalizadas.
+- Toda turma tem **no mínimo 3 e no máximo 12 pessoas** (configurável). Se não houver 3 pessoas da mesma NR com folga possível no mesmo dia, o colaborador aparece em "Sem turma" com esse motivo.
 - Ninguém é colocado em dois treinamentos no mesmo dia.

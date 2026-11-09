@@ -154,7 +154,7 @@ details.cfg summary { cursor: pointer; font-weight: 600; }
       <div class="field"><label for="inicio">Planejar a partir de</label><input type="date" id="inicio"></div>
       <div class="field"><label for="meses">Meses à frente</label><input type="number" id="meses" min="1" max="24" value="3"></div>
       <div class="field"><label for="antecedencia">Antecedência máxima (dias)</label><input type="number" id="antecedencia" min="0" max="365" value="90"></div>
-      <div class="field"><label for="capMax">Vagas por turma</label><input type="number" id="capMax" min="1" max="200" value="20"></div>
+      <div class="field"><label for="capMax">Vagas por turma</label><input type="number" id="capMax" min="1" max="200" value="12"></div>
       <div class="field"><label for="capMin">Mínimo por turma</label><input type="number" id="capMin" min="1" max="200" value="3"></div>
       <div class="field"><label for="porSemana">Turmas por semana (mín.)</label><input type="number" id="porSemana" min="0" max="10" value="2"></div>
       <label class="check"><input type="checkbox" id="feriadosNac" checked> Pular feriados nacionais</label>
@@ -202,6 +202,7 @@ details.cfg summary { cursor: pointer; font-weight: 600; }
         <li>A data fica entre o início da janela de antecedência e o dia anterior ao vencimento. Quem já está vencido pode ser chamado em qualquer data do período, com prioridade.</li>
         <li>Quem vence primeiro é encaixado primeiro. Cada turma escolhe o dia que reúne mais colaboradores da mesma NR, até o limite de vagas.</li>
         <li>Depois o programa tenta garantir o mínimo de turmas por semana, movendo colaboradores que também podem ir naquela semana, sem deixar a turma de origem abaixo do mínimo. Semanas onde não deu ficam marcadas.</li>
+        <li>Toda turma tem entre o mínimo e o máximo de pessoas (padrão: 3 a 12). Se não houver pelo menos o mínimo de pessoas da mesma NR com folga possível no mesmo dia, o colaborador vai para <b>Sem turma</b> com esse motivo.</li>
         <li>Ninguém faz dois treinamentos no mesmo dia.</li>
       </ul>
     </div>
@@ -467,6 +468,35 @@ function planejar(dados, cfg) {
     }
   }
 
+  // 4) mínimo por turma é obrigatório: completar ou desfazer turmas pequenas
+  const vivas = () => turmas.filter((t) => t.membros.length);
+  const pequenas = () => vivas().filter((t) => t.membros.length < cfg.capMin).sort((a, b) => a.membros.length - b.membros.length);
+  for (const t of pequenas()) {
+    if (!t.membros.length || t.membros.length >= cfg.capMin) continue;
+    // a) levar os membros para outra turma da mesma NR com vaga
+    for (const i of [...t.membros]) {
+      let destino = null;
+      for (const o of vivas()) {
+        if (o === t || o.nr !== t.nr || o.membros.length >= cfg.capMax || !i.candSet.has(o.dia) || isBusy(i, o.dia)) continue;
+        if (o.membros.length < t.membros.length && o.membros.length < cfg.capMin) continue;
+        if (!destino || o.membros.length > destino.membros.length) destino = o;
+      }
+      if (destino) { remove(t, i); add(destino, i); }
+    }
+    if (!t.membros.length || t.membros.length >= cfg.capMin) continue;
+    // b) trazer gente de turmas que têm sobra (acima do mínimo) para completar esta
+    const doadores = ativos.filter((i) => i.turma && i.turma !== t && i.nr === t.nr && i.candSet.has(t.dia) && !isBusy(i, t.dia))
+      .sort((a, b) => b.turma.membros.length - a.turma.membros.length);
+    const plano = [], tam = new Map(vivas().map((o) => [o, o.membros.length]));
+    for (const i of doadores) {
+      if (t.membros.length + plano.length >= cfg.capMin) break;
+      if (tam.get(i.turma) - 1 >= cfg.capMin) { plano.push(i); tam.set(i.turma, tam.get(i.turma) - 1); }
+    }
+    if (t.membros.length + plano.length >= cfg.capMin) { for (const i of plano) { remove(i.turma, i); add(t, i); } continue; }
+    // c) não fechou o mínimo: desfaz a turma
+    for (const i of [...t.membros]) { remove(t, i); i.motivo = `Não há pelo menos ${cfg.capMin} pessoas da ${t.nr} com folga possível no mesmo dia`; }
+  }
+
   const finais = turmas.filter((t) => t.membros.length).sort((a, b) => a.dia - b.dia || a.nr.localeCompare(b.nr));
   finais.forEach((t, k) => { t.codigo = "T" + pad(k + 1); t.membros.sort((a, b) => a.venc - b.venc || a.nome.localeCompare(b.nome)); });
   itens.forEach((i) => { if (i.turma) i.motivo = ""; else if (!i.motivo && i.status !== "sem-data") i.motivo = "Não foi possível encaixar"; });
@@ -505,7 +535,7 @@ let dados = exemplo(), fonteNome = null, resultado = null;
 function toast(msg) { const t = $("toast"); t.textContent = msg; t.hidden = false; clearTimeout(toast._h); toast._h = setTimeout(() => (t.hidden = true), 3500); }
 function lerCfg() {
   const num = (id, def) => { const v = parseInt($(id).value, 10); return isFinite(v) ? v : def; };
-  return { inicio: parseDate($("inicio").value) ?? todayDay(), meses: Math.max(1, num("meses", 3)), antecedencia: Math.max(0, num("antecedencia", 90)), capMax: Math.max(1, num("capMax", 20)), capMin: Math.max(1, num("capMin", 3)), porSemana: Math.max(0, num("porSemana", 2)), feriadosNac: $("feriadosNac").checked };
+  return { inicio: parseDate($("inicio").value) ?? todayDay(), meses: Math.max(1, num("meses", 3)), antecedencia: Math.max(0, num("antecedencia", 90)), capMax: Math.max(1, num("capMax", 12)), capMin: Math.min(Math.max(1, num("capMin", 3)), Math.max(1, num("capMax", 12))), porSemana: Math.max(0, num("porSemana", 2)), feriadosNac: $("feriadosNac").checked };
 }
 function renderValidades() {
   const nrs = new Set([...Object.keys(validades), ...dados.rows.map((r) => baseNR(r.nr))]);
