@@ -624,7 +624,7 @@ function folgaFn(row, folgasExplicitas, esc = escalaDados) {
     const eg = grupo ? esc.porGrupo.get(keyGrupo(grupo)) : null;
     const rot = `turma ${keyGrupo(grupo).toUpperCase()}`;
     if (eg) return eg.folgas ? deSet(eg, rot) : deCiclo(eg, rot);
-    if (grupo && esc.porGrupo.size) return { erro: `A turma ${grupo} não aparece na escala de folgas` };
+    if (grupo && esc.porGrupo.size) return { erro: `A turma ${grupo} não aparece na escala de folgas`, turmaFora: grupo, origem: row.grupoOrigem || "" };
     const en = row.nome ? esc.porNome.get(norm(row.nome)) : null;
     if (en) return en.folgas ? deSet(en, "calendário da escala") : deCiclo(en, "planilha de escala");
   }
@@ -659,7 +659,11 @@ function planejar(dados, cfg) {
   const itens = [];
   for (const r0 of dados.rows) {
     const cad = cadastro ? (cadastro.porMat.get(keyMat(r0.matricula)) || (r0.nome ? cadastro.porNome.get(norm(r0.nome)) : null)) : null;
-    const r = cad ? { ...r0, grupo: r0.grupo || cad.turma, nome: r0.nome || cad.nome, setor: r0.setor || cad.setor, funcao: r0.funcao || cad.funcao } : r0;
+    // turma da escala: a do cadastro tem prioridade; a coluna "Turma" da planilha de treinamentos só vale se existir na escala
+    const naEscala = (g) => !!g && !!escalaDados && escalaDados.porGrupo.has(keyGrupo(g));
+    const opcoes = [[cad?.turma, "planilha de colaboradores e turmas"], [r0.grupo, "planilha de treinamentos"]].filter(([g]) => g);
+    const [grupo, grupoOrigem] = opcoes.find(([g]) => naEscala(g)) || opcoes[0] || ["", ""];
+    const r = { ...r0, grupo, grupoOrigem, nome: r0.nome || cad?.nome || "", setor: r0.setor || cad?.setor || "", funcao: r0.funcao || cad?.funcao || "" };
     let venc = r.vencimento;
     if (venc == null && r.ultimo != null) { const meses = validades[baseNR(r.nr)]; if (meses) venc = addMonths(r.ultimo, meses); }
     const item = { ...r, venc, status: "", turma: null, motivo: "", cands: [], semCadastro: !!cadastro && !cad };
@@ -674,7 +678,7 @@ function planejar(dados, cfg) {
     const ff = folgaFn(r, dados.folgas);
     if (ff.rotulo) item.escala = ff.rotulo;
     item.projApos = ff.projApos ?? null;
-    if (ff.erro) { item.motivo = ff.erro; itens.push(item); continue; }
+    if (ff.erro) { item.motivo = ff.erro; if (ff.turmaFora) item.turmaFora = [ff.turmaFora, ff.origem]; itens.push(item); continue; }
     for (let d = janIni; d <= janFim; d++) if (util(d) && ff.off(d) && ff.off(d - 1) && ff.off(d + 1)) item.cands.push(d);
     if (!item.cands.length) {
       item.motivo = ff.folgaDias != null && ff.folgaDias < 3
@@ -867,8 +871,13 @@ function gerar() {
     if (semEsc.size) avisos.push(`${semEsc.size} colaborador(es) não foram encontrados na planilha de escala: ${[...semEsc].slice(0, 12).join(", ")}${semEsc.size > 12 ? "…" : ""}. Confira as matrículas.`);
     const semTurma = new Set(R.itens.filter((i) => /Não sei a turma/.test(i.motivo)).map((i) => i.matricula));
     if (semTurma.size && !cadastro) avisos.push(`A escala é por turma: carregue a planilha de colaboradores e turmas (campo 2) para ligar cada colaborador à turma dele.`);
-    const turmaFora = [...new Set(R.itens.map((i) => (i.motivo.match(/^A turma (.+) não aparece na escala/) || [])[1]).filter(Boolean))];
-    if (turmaFora.length) avisos.push(`Turma(s) ${turmaFora.join(", ")} não aparecem na escala de folgas. Confira se o nome da turma é o mesmo nas duas planilhas.`);
+    const fora = new Map();
+    R.itens.filter((i) => i.turmaFora).forEach((i) => { const k = i.turmaFora.join("|"); if (!fora.has(k)) fora.set(k, { turma: i.turmaFora[0], origem: i.turmaFora[1], mats: new Set() }); fora.get(k).mats.add(i.matricula); });
+    const turmasEscala = [...escalaDados.porGrupo.keys()].map((k) => k.toUpperCase()).sort().join(", ");
+    for (const f of fora.values()) {
+      const m = [...f.mats];
+      avisos.push(`${m.length} colaborador(es) estão com a turma "${f.turma}"${f.origem ? ` na ${f.origem}` : ""}, mas a escala só tem as turmas ${turmasEscala}. Matrículas: ${m.slice(0, 12).join(", ")}${m.length > 12 ? "…" : ""}. Corrija a turma desses colaboradores para uma das turmas da escala.`);
+    }
   }
   $("avisos").innerHTML = avisos.map((a) => `<div class="msg">${esc(a)}</div>`).join("");
 
