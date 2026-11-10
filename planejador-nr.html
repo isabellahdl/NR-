@@ -376,8 +376,8 @@ const COLS = {
   setor: ["setor", "area", "departamento", "centrodecusto", "gerencia"],
   funcao: ["funcao", "cargo"],
   nr: ["nr", "treinamento", "norma", "curso", "normaregulamentadora"],
-  nomeTreino: ["nomedotreinamento", "nometreinamento", "descricaodotreinamento", "descricaotreinamento", "nomedocurso", "nomecurso", "descricaocurso", "descricaodocurso"],
-  codTreino: ["codigodotreinamento", "codigotreinamento", "codtreinamento", "codigodocurso", "codigocurso", "codcurso", "codigo", "cod"],
+  nomeTreino: ["descitem", "descricaoitem", "descricaodoitem", "nomeitem", "nomedoitem", "nomedotreinamento", "nometreinamento", "descricaodotreinamento", "descricaotreinamento", "nomedocurso", "nomecurso", "descricaocurso", "descricaodocurso"],
+  codTreino: ["coditem", "codigoitem", "codigodoitem", "codigodotreinamento", "codigotreinamento", "codtreinamento", "codigodocurso", "codigocurso", "codcurso", "codigo", "cod"],
   horario: ["horario", "horariodotreinamento", "hora", "horas"],
   local: ["local", "localdotreinamento", "localtreinamento", "sala"],
   negocio: ["negocio", "unidadedenegocio", "unidade", "empresa", "bu"],
@@ -441,16 +441,18 @@ function parseWorkbook(wb) {
     } else if (n.includes("feriado")) {
       const dcol = map.data || Object.keys(json[0])[0];
       for (const r of json) { const d = parseDate(r[dcol]); if (d != null) out.feriados.push([d, String(r[map.descricao] || "Feriado")]); }
-    } else if (!main && map.nr && (map.nome || map.matricula)) {
+    } else if (!main && (map.nr || map.nomeTreino) && (map.nome || map.matricula)) {
       main = { name, json, map };
     }
   }
-  if (!main) { out.avisos.push("Não encontrei uma aba com as colunas NR e Nome (ou Matrícula). Use o modelo como referência."); return out; }
+  if (!main) { out.avisos.push("Não encontrei uma aba com a coluna do treinamento (DESC_ITEM, Treinamento ou NR) e Matrícula (ou Nome). Use o modelo como referência."); return out; }
   const { json, map } = main;
   if (!map.vencimento && !map.ultimo) out.avisos.push("A planilha não tem coluna de Vencimento nem de Data do Último Treinamento.");
   out.semEscala = !map.base && !map.iniFolga && !out.folgas.size;
   json.forEach((r, i) => {
-    const nr = normNR(r[map.nr]); if (!nr) return;
+    // o nome do treinamento (ex.: coluna DESC_ITEM) tem prioridade sobre colunas de tipo como "Treinamento"/"Portal EnK"
+    const textoTreino = String((map.nomeTreino && String(r[map.nomeTreino] ?? "").trim() ? r[map.nomeTreino] : r[map.nr]) ?? "").trim();
+    const nr = normNR(textoTreino); if (!nr) return;
     out.rows.push({
       linha: i + 2,
       matricula: String(r[map.matricula] ?? "").trim() || `L${i + 2}`,
@@ -465,7 +467,7 @@ function parseWorkbook(wb) {
       iniFolga: map.iniFolga ? parseDate(r[map.iniFolga]) : null,
       grupo: String(r[map.grupo] ?? "").trim(),
       negocio: String(r[map.negocio] ?? "").trim(),
-      nomeTreino: String((map.nomeTreino ? r[map.nomeTreino] : r[map.nr]) ?? "").trim(),
+      nomeTreino: textoTreino,
       codTreino: String(r[map.codTreino] ?? "").trim(),
       horario: String(r[map.horario] ?? "").trim(),
       local: String(r[map.local] ?? "").trim(),

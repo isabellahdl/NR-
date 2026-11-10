@@ -8,7 +8,7 @@ Programa para saber quais colaboradores precisam reciclar treinamentos de NR nos
 2. Carregue as três planilhas, em qualquer ordem:
    1. **Escala de revezamento:** a escala do ano, como já é usada (colunas F com as turmas de folga).
    2. **Colaboradores e turmas:** Matrícula, Nome, Negócio (KR, KE) e Turma (A, B, C, D, E). Setor e Função são opcionais.
-   3. **Treinamentos vencidos e a vencer:** Matrícula, Treinamento (ex.: "NR18 serviço a quente - Prático" ou "NR-35"), Código (opcional) e Vencimento (ou Data do Último Treinamento).
+   3. **Treinamentos vencidos e a vencer:** Matrícula, nome do treinamento (coluna **DESC_ITEM**, ou Treinamento/NR se não houver DESC_ITEM), código (COD_ITEM, opcional) e Vencimento (ou Data do Último Treinamento).
 3. Cada campo tem um botão **Modelo** com a planilha pronta para preencher.
 4. Ajuste o período, as vagas (padrão 12), o mínimo por turma (padrão 3) e as turmas por semana, se precisar.
 5. Clique em **Exportar resultado (Excel)** para baixar as turmas, a lista de quem vence e as pendências.
