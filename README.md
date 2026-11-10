@@ -17,7 +17,9 @@ Se a planilha de treinamentos tiver as colunas **Código**, **Horário** e **Loc
 
 A aba **Por turma da escala** mostra, para cada turma (A, B, C, D, E), o nome de cada treinamento que a turma precisa fazer, quantas pessoas, em quais turmas/datas foram marcadas e quantas ficaram sem turma (também vai para o Excel).
 
-A exportação começa pela aba **Programação**, no mesmo formato da planilha feita à mão: Data, Dia, Horário, Local, Código, Treinamento, Matrícula, Nome, Negócio (KR/KE), Convocado e Realizado, com as células de cada turma mescladas e uma linha em branco entre as turmas.
+Cada turma formada leva o nome do treinamento, como está escrito na planilha (ex.: **"NR33 – Turma 01"**, **"NR18 serviço a quente - Prático – Turma 02"**), numerada por treinamento.
+
+A exportação começa pela aba **Programação**, no mesmo formato da planilha feita à mão: Turma, Data, Dia, Horário, Local, Código, Treinamento, Matrícula, Nome, Negócio (KR/KE), Convocado e Realizado, com as células de cada turma mescladas e uma linha em branco entre as turmas.
 
 Quando a escala acaba (ex.: em 31/12), o programa continua o ciclo 6x4 sozinho, desde que os últimos dias da escala sigam esse ciclo. As turmas marcadas nesse período aparecem como "pela projeção da escala". Quando a escala do ano seguinte sair, troque só o arquivo da escala.
 

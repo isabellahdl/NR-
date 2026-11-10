@@ -361,6 +361,7 @@ function infoTreino(nr) {
   const nomePlanilha = bruto && normNR(bruto) !== baseNR(nr) ? bruto : "";
   return {
     nome: nomePlanilha || (nomeTreinamento(nr) ? `${baseNR(nr)} – ${nomeTreinamento(nr)}` : nr),
+    curto: bruto || nr, // como está escrito na planilha (ex.: "NR33", "NR18 serviço a quente - Prático")
     codigo: primeiro("codTreino"),
     horario: primeiro("horario"),
     local: primeiro("local"),
@@ -840,9 +841,9 @@ function planejar(dados, cfg) {
   const seqNR = new Map();
   finais.forEach((t) => { t.conflito = finais.some((o) => o !== t && o.nr === t.nr && o.dia === t.dia); });
   finais.forEach((t) => {
-    const b = baseNR(t.nr), n = (seqNR.get(b) || 0) + 1; seqNR.set(b, n);
+    const n = (seqNR.get(t.nr) || 0) + 1; seqNR.set(t.nr, n);
     const info = infoTreino(t.nr);
-    Object.assign(t, { codigo: `${b} – T${pad(n)}`, titulo: info.nome, codTreino: info.codigo, horario: info.horario, local: info.local, vagas: cap(t.nr) });
+    Object.assign(t, { codigo: `${info.curto} – Turma ${pad(n)}`, titulo: info.nome, subtitulo: info.nome !== info.curto ? info.nome : "", codTreino: info.codigo, horario: info.horario, local: info.local, vagas: cap(t.nr) });
   });
   finais.forEach((t, k) => { t.projetada = t.membros.some((i) => i.projApos != null && t.dia > i.projApos); t.membros.sort((a, b) => a.venc - b.venc || a.nome.localeCompare(b.nome)); });
   itens.forEach((i) => { if (i.turma) i.motivo = ""; else if (!i.motivo && i.status !== "sem-data") i.motivo = "Não foi possível encaixar"; });
@@ -958,7 +959,7 @@ function gerar() {
     const body = ts.length ? ts.map((t) => `
       <details class="turma"><summary>
         <span class="date">${DOW[dow(t.dia)]} ${fmt(t.dia)}</span>
-        <span class="nr">${esc(t.codigo)}${t.turmaEscala ? ` <span class="pill neutral">turma ${esc(t.turmaEscala)} da escala</span>` : ""}${t.titulo ? `<span class="titulo">${esc(t.titulo)}</span>` : ""}<span class="titulo">${esc([t.horario, t.local, t.codTreino && "cód. " + t.codTreino].filter(Boolean).join(" · "))}</span></span>
+        <span class="nr">${esc(t.codigo)}${t.turmaEscala ? ` <span class="pill neutral">turma ${esc(t.turmaEscala)} da escala</span>` : ""}${t.subtitulo ? `<span class="titulo">${esc(t.subtitulo)}</span>` : ""}<span class="titulo">${esc([t.horario, t.local, t.codTreino && "cód. " + t.codTreino].filter(Boolean).join(" · "))}</span></span>
         <span>${t.conflito ? `<span class="pill bad" title="Não havia outro dia de folga possível para estes colaboradores">mesmo dia de outra turma deste treinamento</span> ` : ""}${t.projetada ? `<span class="pill neutral" title="A escala carregada termina antes desta data; o dia foi calculado repetindo o ciclo">pela projeção da escala</span> ` : ""}${t.membros.length < cfg.capMin ? `<span class="pill warn">${t.membros.length} pessoa${t.membros.length === 1 ? "" : "s"} · abaixo do mínimo</span>` : `<span class="pill neutral">${t.membros.length} de ${t.vagas} vagas</span>`}</span>
       </summary><div class="members tablewrap"><table><thead><tr><th>Matrícula</th><th>Nome</th><th>Negócio</th><th>Setor</th><th>Escala</th><th>Vencimento</th><th>Situação</th></tr></thead><tbody>
         ${t.membros.map((i) => `<tr><td>${esc(i.matricula)}</td><td>${esc(i.nome)}</td><td>${esc(i.negocio)}</td><td>${esc(i.setor)}</td><td>${esc(i.escala)}</td><td class="dt">${fmt(i.venc)}</td><td>${situacao(i)}</td></tr>`).join("")}
@@ -1012,19 +1013,19 @@ async function salvar(wb, filename) {
 }
 const DIA_NOME = ["Domingo", "Segunda", "Terça", "Quarta", "Quinta", "Sexta", "Sábado"];
 function folhaProgramacao(R) {
-  const head = ["Data", "Dia", "Horário", "Local", "Código", "Treinamento", "Matrícula", "Nome", "Negócio", "Convocado", "Realizado"];
+  const head = ["Turma", "Data", "Dia", "Horário", "Local", "Código", "Treinamento", "Matrícula", "Nome", "Negócio", "Convocado", "Realizado"];
   const aoa = [head], merges = [];
   for (const t of R.turmas) {
     const ini = aoa.length;
     t.membros.forEach((i, k) => aoa.push(k === 0
-      ? [fmt(t.dia), DIA_NOME[dow(t.dia)], t.horario, t.local, t.codTreino, t.titulo, i.matricula, i.nome, i.negocio, "Não", "Não"]
-      : ["", "", "", "", "", "", i.matricula, i.nome, i.negocio, "Não", "Não"]));
-    if (t.membros.length > 1) for (let c = 0; c < 6; c++) merges.push({ s: { r: ini, c }, e: { r: aoa.length - 1, c } });
+      ? [t.codigo, fmt(t.dia), DIA_NOME[dow(t.dia)], t.horario, t.local, t.codTreino, t.titulo, i.matricula, i.nome, i.negocio, "Não", "Não"]
+      : ["", "", "", "", "", "", "", i.matricula, i.nome, i.negocio, "Não", "Não"]));
+    if (t.membros.length > 1) for (let c = 0; c < 7; c++) merges.push({ s: { r: ini, c }, e: { r: aoa.length - 1, c } });
     aoa.push([]);
   }
   const ws = XLSX.utils.aoa_to_sheet(aoa);
   ws["!merges"] = merges;
-  ws["!cols"] = [12, 10, 10, 20, 12, 36, 11, 36, 9, 11, 11].map((w) => ({ wch: w }));
+  ws["!cols"] = [34, 12, 10, 10, 20, 12, 36, 11, 36, 9, 11, 11].map((w) => ({ wch: w }));
   return ws;
 }
 function resumoPorTurma(R) {
