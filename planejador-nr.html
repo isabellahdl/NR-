@@ -211,6 +211,7 @@ details.cfg summary { cursor: pointer; font-weight: 600; }
   <nav class="tabs" role="tablist">
     <button type="button" role="tab" data-tab="turmas" aria-selected="true">Turmas <span class="count" id="cTurmas"></span></button>
     <button type="button" role="tab" data-tab="vencimentos" aria-selected="false">A vencer <span class="count" id="cVenc"></span></button>
+    <button type="button" role="tab" data-tab="porturma" aria-selected="false">Por turma da escala</button>
     <button type="button" role="tab" data-tab="pendencias" aria-selected="false">Sem turma <span class="count" id="cPend"></span></button>
     <button type="button" role="tab" data-tab="regras" aria-selected="false">Como funciona</button>
   </nav>
@@ -223,6 +224,7 @@ details.cfg summary { cursor: pointer; font-weight: 600; }
     </div>
     <div class="tablewrap"><table id="tblVenc"></table></div>
   </section>
+  <section class="view" id="tab-porturma" hidden></section>
   <section class="view" id="tab-pendencias" hidden>
     <div class="tablewrap"><table id="tblPend"></table></div>
   </section>
@@ -969,6 +971,14 @@ function gerar() {
   $("filtroNR").innerHTML = `<option value="">Todas</option>` + nrs.map((n) => `<option ${n === atual ? "selected" : ""}>${esc(n)}</option>`).join("");
   renderVenc();
 
+  // treinamentos que cada turma da escala precisa fazer
+  const porTurma = resumoPorTurma(R);
+  $("tab-porturma").innerHTML = porTurma.length ? porTurma.map(([te, linhas]) => `
+    <article class="week"><div class="week-h"><h3>${te === "—" ? "Sem turma da escala" : `Turma ${esc(te)}`}</h3><span class="pill neutral">${linhas.length} treinamento${linhas.length === 1 ? "" : "s"} · ${linhas.reduce((n, l) => n + l.pessoas, 0)} inscrições</span></div>
+    <div class="tablewrap" style="border:none;border-radius:0"><table><thead><tr><th>Treinamento que a turma precisa fazer</th><th>Pessoas</th><th>Turmas marcadas</th><th>Sem turma</th></tr></thead><tbody>
+    ${linhas.map((l) => `<tr><td>${esc(l.nome)}</td><td class="num">${l.pessoas}</td><td>${l.turmas.length ? l.turmas.map((t) => `${esc(t.codigo)} · ${DOW[dow(t.dia)]} ${fmt(t.dia)} (${t.n})`).join("<br>") : "—"}</td><td class="num">${l.sem ? `<span class="pill warn">${l.sem}</span>` : "0"}</td></tr>`).join("")}
+    </tbody></table></div></article>`).join("") : `<div class="panel">Nenhum treinamento a vencer no período.</div>`;
+
   $("tblPend").innerHTML = pend.length ? `<thead><tr><th>Matrícula</th><th>Nome</th><th>Setor</th><th>NR</th><th>Vencimento</th><th>Escala</th><th>Motivo</th></tr></thead><tbody>` +
     pend.sort((a, b) => (a.venc ?? 1e9) - (b.venc ?? 1e9)).map((i) => `<tr><td>${esc(i.matricula)}</td><td>${esc(i.nome)}</td><td>${esc(i.setor)}</td><td>${esc(i.nr)}</td><td class="dt">${fmt(i.venc)}</td><td>${esc(i.escala)}</td><td class="wrap">${esc(i.motivo)}</td></tr>`).join("") + `</tbody>`
     : `<tbody><tr><td>Todos os treinamentos do período foram encaixados em turmas.</td></tr></tbody>`;
@@ -1017,6 +1027,19 @@ function folhaProgramacao(R) {
   ws["!cols"] = [12, 10, 10, 20, 12, 36, 11, 36, 9, 11, 11].map((w) => ({ wch: w }));
   return ws;
 }
+function resumoPorTurma(R) {
+  const mapa = new Map();
+  for (const i of R.itens) {
+    const te = i.turmaEscala || (i.grupo ? keyGrupo(i.grupo).toUpperCase() : "—");
+    if (!mapa.has(te)) mapa.set(te, new Map());
+    const m = mapa.get(te);
+    if (!m.has(i.nr)) m.set(i.nr, { nome: infoTreino(i.nr).nome, pessoas: 0, sem: 0, turmas: new Map() });
+    const l = m.get(i.nr); l.pessoas++;
+    if (i.turma) { const t = l.turmas.get(i.turma) || { codigo: i.turma.codigo, dia: i.turma.dia, n: 0 }; t.n++; l.turmas.set(i.turma, t); } else l.sem++;
+  }
+  return [...mapa.entries()].sort((a, b) => (a[0] === "—") - (b[0] === "—") || a[0].localeCompare(b[0]))
+    .map(([te, m]) => [te, [...m.values()].map((l) => ({ ...l, turmas: [...l.turmas.values()].sort((a, b) => a.dia - b.dia) })).sort((a, b) => b.pessoas - a.pessoas || a.nome.localeCompare(b.nome))]);
+}
 function exportar() {
   if (!resultado) return;
   const R = resultado, wb = XLSX.utils.book_new();
@@ -1027,6 +1050,8 @@ function exportar() {
   XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(R.turmas.map((t) => ({ Turma: t.codigo, Treinamento: t.titulo, "Código": t.codTreino, "Turma da escala": t.turmaEscala || "", Data: fmt(t.dia), "Dia da semana": DIA_NOME[dow(t.dia)], Horário: t.horario, Local: t.local, Participantes: t.membros.length, Observação: t.projetada ? "Data calculada pela projeção da escala (depois do fim da planilha)" : "" }))), "Resumo das turmas");
   XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(R.semanas.map((w) => { const n = R.turmas.filter((t) => monday(t.dia) === w).length; return { Semana: `${fmt(Math.max(w, R.inicio))} a ${fmt(Math.min(w + 4, R.fim))}`, Turmas: n, "Atende mínimo": n >= R.cfg.porSemana ? "Sim" : "Não" }; })), "Semanas");
   XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet([...R.itens].sort((a, b) => (a.venc ?? 1e9) - (b.venc ?? 1e9)).map((i) => ({ Matrícula: i.matricula, Nome: i.nome, Setor: i.setor, Negócio: i.negocio, NR: i.nr, Treinamento: infoTreino(i.nr).nome, Vencimento: fmt(i.venc), Situação: i.status === "sem-data" ? "Sem data" : i.vencido ? "Vencido" : `Vence em ${i.diasAte} dias`, Escala: i.escala, Turma: i.turma ? i.turma.codigo : "", "Data da turma": i.turma ? fmt(i.turma.dia) : "", Motivo: i.turma ? "" : i.motivo }))), "A vencer");
+  const porTurmaRows = resumoPorTurma(R).flatMap(([te, linhas]) => linhas.map((l) => ({ "Turma da escala": te === "—" ? "Sem turma" : te, "Treinamento que a turma precisa fazer": l.nome, Pessoas: l.pessoas, "Turmas marcadas": l.turmas.map((t) => `${t.codigo} ${fmt(t.dia)} (${t.n})`).join("; "), "Sem turma": l.sem })));
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(porTurmaRows.length ? porTurmaRows : [{ "Turma da escala": "Nenhum treinamento" }]), "Por turma da escala");
   const pend = R.itens.filter((i) => !i.turma);
   XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(pend.length ? pend.map((i) => ({ Matrícula: i.matricula, Nome: i.nome, NR: i.nr, Vencimento: fmt(i.venc), Escala: i.escala, Motivo: i.motivo })) : [{ Matrícula: "Nenhuma pendência" }]), "Sem turma");
   salvar(wb, `turmas-nr-${fmt(R.inicio).replace(/\//g, "-")}.xlsx`);
@@ -1161,7 +1186,7 @@ $("busca").addEventListener("input", renderVenc);
 $("filtroNR").addEventListener("change", renderVenc);
 document.querySelectorAll(".tabs button").forEach((b) => b.addEventListener("click", () => {
   document.querySelectorAll(".tabs button").forEach((x) => x.setAttribute("aria-selected", String(x === b)));
-  ["turmas", "vencimentos", "pendencias", "regras"].forEach((t) => ($("tab-" + t).hidden = t !== b.dataset.tab));
+  ["turmas", "vencimentos", "porturma", "pendencias", "regras"].forEach((t) => ($("tab-" + t).hidden = t !== b.dataset.tab));
 }));
 { const [y, m, d] = ymd(todayDay()); $("inicio").value = `${y}-${pad(m)}-${pad(d)}`; }
 renderValidades();
