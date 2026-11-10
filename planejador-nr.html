@@ -153,11 +153,12 @@ details.cfg summary { cursor: pointer; font-weight: 600; }
   <section class="files" aria-label="Planilhas">
     <div class="slot">
       <div class="slot-h"><span class="slot-n">1</span><h3>Escala de revezamento</h3></div>
-      <p class="slot-d">Dias de folga de cada turma (colunas F).</p>
+      <p class="slot-d">Dias de folga de cada turma (colunas F). Pode carregar mais de um arquivo (ex.: 2026 e 2027): o programa junta.</p>
       <p class="slot-st" id="stEscala"><span class="pill neutral">não carregada</span></p>
       <div class="actions">
-        <label class="filebtn" for="arqEscala">Carregar<input type="file" id="arqEscala" accept=".xlsx,.xls,.csv"></label>
+        <label class="filebtn" for="arqEscala">Carregar<input type="file" id="arqEscala" accept=".xlsx,.xls,.csv" multiple></label>
         <button type="button" id="btnModeloEscala">Modelo</button>
+        <button type="button" id="btnLimparEscala" hidden>Limpar</button>
       </div>
     </div>
     <div class="slot">
@@ -1092,15 +1093,45 @@ async function lerArquivo(f) {
   const buf = await f.arrayBuffer();
   return XLSX.read(buf, { type: "array", raw: /\.csv$/i.test(f.name), codepage: 65001 });
 }
+// junta uma escala nova à que já está carregada; nos dias que as duas cobrem, vale a nova
+function juntarEscala(a, b) {
+  if (!a) return b;
+  for (const k of ["porMat", "porGrupo", "porNome"]) for (const [chave, nova] of b[k]) {
+    const velha = a[k].get(chave);
+    if (nova.folgas && velha && velha.folgas) {
+      const diasNovos = nova.dias && nova.dias.length ? nova.dias : [...nova.folgas];
+      for (const d of diasNovos) velha.folgas.delete(d);
+      for (const d of nova.folgas) velha.folgas.add(d);
+      velha.dias = (velha.dias && velha.dias.length ? velha.dias : [...velha.folgas]).concat(diasNovos);
+      velha.min = Math.min(velha.min, nova.min); velha.max = Math.max(velha.max, nova.max);
+      delete velha._p; delete velha._ok;
+    } else a[k].set(chave, nova);
+  }
+  for (const [m, g] of b.membros) a.membros.set(m, g);
+  b.formatos.forEach((f) => a.formatos.add(f));
+  a.avisos.push(...b.avisos); a.feriados.push(...b.feriados);
+  return a;
+}
 $("arqEscala").addEventListener("change", async (ev) => {
-  const f = ev.target.files[0]; if (!f) return;
-  try {
-    const e = parseEscala(await lerArquivo(f));
-    if (!e.porMat.size && !e.porGrupo.size && !e.porNome.size) { $("avisos").innerHTML = `<div class="msg">${esc(e.avisos[0])}</div>`; return; }
-    escalaDados = e; escalaNome = f.name; gerar();
-    toast(`Escala carregada (${[...e.formatos].join(", ")})`);
-  } catch (err) { $("avisos").innerHTML = `<div class="msg">${esc(err.message || "Não consegui ler a planilha de escala.")}</div>`; }
+  const arquivos = [...ev.target.files]; if (!arquivos.length) return;
+  const lidos = [];
+  for (const f of arquivos) {
+    try {
+      const e = parseEscala(await lerArquivo(f));
+      if (!e.porMat.size && !e.porGrupo.size && !e.porNome.size) { $("avisos").innerHTML = `<div class="msg">${esc(f.name)}: ${esc(e.avisos[0])}</div>`; continue; }
+      escalaDados = juntarEscala(escalaDados, e); lidos.push(f.name);
+    } catch (err) { $("avisos").innerHTML = `<div class="msg">${esc(f.name)}: ${esc(err.message || "Não consegui ler a planilha de escala.")}</div>`; }
+  }
+  if (lidos.length) {
+    escalaNome = [escalaNome, ...lidos].filter(Boolean).join(" + ");
+    $("btnLimparEscala").hidden = false; gerar();
+    toast(`Escala carregada: ${lidos.join(", ")}`);
+  }
   ev.target.value = "";
+});
+$("btnLimparEscala").addEventListener("click", () => {
+  escalaDados = null; escalaNome = null; $("btnLimparEscala").hidden = true;
+  $("stEscala").innerHTML = `<span class="pill neutral">não carregada</span>`; gerar(); toast("Escala removida");
 });
 $("btnModeloCadastro").addEventListener("click", () => { if (typeof XLSX === "undefined") return toast("A biblioteca de planilhas não carregou."); modeloCadastro(); });
 $("arqCadastro").addEventListener("change", async (ev) => {

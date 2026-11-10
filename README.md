@@ -49,7 +49,7 @@ A planilha "Escala de Revezamento" (uma aba por ano, blocos por mês com as colu
 
 - as turmas que aparecem nas colunas **F** são as que estão de folga naquele dia;
 - dá para ter várias abas (2024, 2025, 2026…) no mesmo arquivo; um bloco de JANEIRO no fim do segundo semestre conta como janeiro do ano seguinte;
-- quando sair a escala do ano seguinte, basta incluir a nova aba (ou carregar o novo arquivo).
+- quando sair a escala do ano seguinte, inclua a nova aba no mesmo arquivo **ou** carregue o arquivo novo no campo 1: o programa **junta** as escalas (nos dias repetidos vale a do arquivo carregado por último). O botão **Limpar** remove as escalas carregadas.
 
 A turma de cada colaborador vem da planilha **Colaboradores e turmas** (ou de uma coluna Turma na planilha de treinamentos).
 
